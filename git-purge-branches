@@ -1,0 +1,5 @@
+#!/bin/bash
+
+branches=( $(git branch --merged | grep -v '*') )
+
+[[ ${#branches[@]} -gt 0 ]] && git branch -d ${branches[@]}
