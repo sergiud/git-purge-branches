@@ -1,5 +1,27 @@
 #!/bin/bash
 
-branches=( $(git branch --merged | grep -v '*') )
+set -euo pipefail
 
-[[ ${#branches[@]} -gt 0 ]] && git branch -d ${branches[@]}
+# List branches merged into HEAD except those checked out in any worktree,
+# which includes the current branch. Unlike the output of git branch, the
+# format is not affected by the user's color or column configuration.
+# shellcheck disable=SC2312 # wait reports the status of the substitution
+exec {fd}< <(git for-each-ref --merged=HEAD --omit-empty \
+    --format='%(if)%(worktreepath)%(then)%(else)%(refname:lstrip=2)%(end)' \
+    refs/heads/)
+declare -i pid=$!
+
+readarray -u "${fd}" -t branches
+exec {fd}<&-
+
+declare -i status=0
+wait "${pid}" || status=$?
+
+if ((status != 0)); then
+    echo "error: failed to list branches, git exited with status ${status}" >&2
+    exit "${status}"
+fi
+
+if [[ ${#branches[@]} -ne 0 ]]; then
+    git branch -d "${branches[@]}"
+fi

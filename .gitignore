@@ -1,0 +1,2 @@
+# Manual pages that just man generates from doc/man
+/man/man[1-9]/*.[1-9]
