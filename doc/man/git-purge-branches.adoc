@@ -1,0 +1,83 @@
+= git-purge-branches(1)
+:doctype: manpage
+:manmanual: Git Manual
+:mansource: scripts
+
+== Name
+
+git-purge-branches - delete local branches merged into a commit
+
+== Synopsis
+
+[verse]
+*git purge-branches* [*-n* | *--dry-run*] [*-e* | *--equivalent*] [_<commit>_]
+*git purge-branches* *-h* | *--help*
+
+== Description
+
+Deletes the local branches merged into _<commit>_, `HEAD` by default.
+A branch is merged if its tip is reachable from _<commit>_.
+
+Two kinds of branches are always kept.
+Branches checked out in any worktree are kept, which includes the current branch.
+Every branch is merged into itself, so a branch given as _<commit>_ is kept as well.
+
+Merged branches are deleted with *git branch -d*, which refuses a branch that is not merged into its upstream or, without an upstream, into `HEAD`.
+A branch merged into _<commit>_ can therefore remain if _<commit>_ is not `HEAD`, or if its upstream lacks commits of the branch.
+
+A remote that rebases a branch before merging it, as GitLab and GitHub offer, merges copies of its commits with other hashes.
+The local branch then keeps the original commits and is not merged.
+*--equivalent* also deletes such branches.
+
+== Options
+
+*-n*, *--dry-run*::
+List the branches that would be deleted, one name per line, and delete nothing.
+With *--equivalent*, the list includes the branches it selects.
+A merged branch that *git branch -d* would refuse is listed as well.
+
+*-e*, *--equivalent*::
+Also delete branches whose commits all have an equivalent in _<commit>_, as *git cherry* determines by comparing the changes of commits.
+A branch that contains an empty commit or a merge commit is kept, since *git cherry* matches an empty commit with any other and omits merge commits, whose own changes it cannot compare.
+These branches are deleted with *git branch -D*, which discards the original commits.
+
+*-h*, *--help*::
+Print a usage summary and exit.
+
+_<commit>_::
+The commit the branches are merged into, `HEAD` by default.
+Options may precede or follow it.
+
+== Exit status
+
+*0*::
+All selected branches were deleted or, with *--dry-run*, listed.
+
+*1*::
+*git branch* failed to delete a branch.
+The remaining branches are still deleted.
+
+*2*::
+An unknown option or more than one _<commit>_ was given.
+
+Any other status is that of *git for-each-ref* when listing the branches fails, such as *128* outside a repository or for an invalid _<commit>_.
+
+== Examples
+
+Delete the branches merged into the current branch:
+
+----
+$ git purge-branches
+----
+
+After updating the current branch, list the branches merged into it, including those that the remote rebased before merging, then delete them:
+
+----
+$ git pull --prune
+$ git purge-branches --dry-run --equivalent
+$ git purge-branches --equivalent
+----
+
+== See also
+
+*git-branch*(1), *git-cherry*(1), *git-for-each-ref*(1)
