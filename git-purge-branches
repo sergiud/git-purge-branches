@@ -2,28 +2,96 @@
 
 set -euo pipefail
 
-# Branches merged into this commit are deleted.
-commit="${1:-HEAD}"
+# Status of a usage error, as for git and getopt
+readonly USAGE_ERROR=2
 
-# List branches merged into the commit except those checked out in any
-# worktree, which includes the current branch. Unlike the output of git branch,
-# the format is not affected by the user's color or column configuration.
-# shellcheck disable=SC2312 # wait reports the status of the substitution
-exec {fd}< <(git for-each-ref --merged="${commit}" --omit-empty \
-    --format='%(if)%(worktreepath)%(then)%(else)%(refname)%(end)' \
-    refs/heads/)
-declare -i pid=$!
+function Usage()
+{
+    cat <<USAGE
+usage: ${0##*/} [-n | --dry-run] [-e | --equivalent] [<commit>]
 
-readarray -u "${fd}" -t refs
-exec {fd}<&-
+Deletes the branches merged into <commit>, HEAD by default, except those
+checked out in any worktree and the branch given as <commit>.
 
-declare -i status=0
-wait "${pid}" || status=$?
+  -n, --dry-run     list the branches that would be deleted instead
+  -e, --equivalent  also delete branches whose commits all have an equivalent
+                    in <commit>, such as after a rebase on a remote
+  -h, --help        show this help
+USAGE
+}
 
-if ((status != 0)); then
-    echo "error: failed to list branches, git exited with status ${status}" >&2
-    exit "${status}"
+declare -i dry_run=0
+declare -i equivalent=0
+positional=()
+
+while (($# > 0)); do
+    case "$1" in
+        -n | --dry-run)
+            dry_run=1
+            ;;
+        -e | --equivalent)
+            equivalent=1
+            ;;
+        -h | --help)
+            Usage
+            exit 0
+            ;;
+        --)
+            shift
+            positional+=("$@")
+            break
+            ;;
+        -*)
+            echo "error: unknown option '$1'" >&2
+            Usage >&2
+            exit "${USAGE_ERROR}"
+            ;;
+        *)
+            positional+=("$1")
+            ;;
+    esac
+    shift
+done
+
+if ((${#positional[@]} > 1)); then
+    echo "error: expected at most 1 commit, got ${#positional[@]}" >&2
+    Usage >&2
+    exit "${USAGE_ERROR}"
 fi
+
+# Branches merged into this commit are deleted.
+commit="${positional[0]:-HEAD}"
+
+# Stores in the array listed the full ref names of the branches that the
+# for-each-ref filter given as the argument selects, except those checked out
+# in any worktree, which includes the current branch. Unlike the output of git
+# branch, the format is not affected by the user's color or column
+# configuration.
+function ListBranches()
+{
+    local filter="$1"
+    local -i fd
+    local -i pid
+    local -i status=0
+
+    # shellcheck disable=SC2312 # wait reports the status of the substitution
+    exec {fd}< <(git for-each-ref "${filter}" --omit-empty \
+        --format='%(if)%(worktreepath)%(then)%(else)%(refname)%(end)' \
+        refs/heads/)
+    pid=$!
+
+    readarray -u "${fd}" -t listed
+    exec {fd}<&-
+
+    wait "${pid}" || status=$?
+
+    if ((status != 0)); then
+        echo "error: failed to list branches, git exited with status ${status}" >&2
+        exit "${status}"
+    fi
+}
+
+ListBranches "--merged=${commit}"
 
 # Every branch is merged into itself, so the list includes the branch given as
 # the commit, which is kept. For the default HEAD, this is the current branch,
@@ -31,14 +99,57 @@ fi
 # compared, since a branch may be named like the full ref of a tag, such as
 # refs/tags/v1.
 target="$(git rev-parse --symbolic-full-name "${commit}")"
-branches=()
+merged=()
 
-for ref in "${refs[@]}"; do
+for ref in "${listed[@]}"; do
     if [[ ${ref} != "${target}" ]]; then
-        branches+=("${ref#refs/heads/}")
+        merged+=("${ref#refs/heads/}")
     fi
 done
 
-if [[ ${#branches[@]} -ne 0 ]]; then
-    git branch -d "${branches[@]}"
+# Branches whose commits have other hashes in the commit, such as after a
+# rebase, are kept unless each of their commits has an equivalent there that
+# git cherry marks with a minus. git cherry omits merge commits and matches an
+# empty commit with any other, so only branches whose commits all change files
+# without merging qualify.
+equivalents=()
+
+if ((equivalent)); then
+    ListBranches "--no-merged=${commit}"
+    declare -i commits
+    declare -i changes
+
+    for ref in "${listed[@]}"; do
+        cherry="$(git cherry "${commit}" "${ref}")"
+        commits="$(git rev-list --count "${commit}..${ref}")"
+        changes="$(git rev-list --count --no-merges "${commit}..${ref}" -- :/)"
+
+        # Hashes are hexadecimal, so a plus sign only marks a commit without
+        # an equivalent.
+        if [[ ${cherry} != *+* ]] && ((changes == commits)); then
+            equivalents+=("${ref#refs/heads/}")
+        fi
+    done
 fi
+
+if ((dry_run)); then
+    for branch in "${merged[@]}" "${equivalents[@]}"; do
+        echo "${branch}"
+    done
+
+    exit 0
+fi
+
+declare -i status=0
+
+if [[ ${#merged[@]} -ne 0 ]]; then
+    git branch -d "${merged[@]}" || status=$?
+fi
+
+# git branch -d refuses branches that are not merged into HEAD or their
+# upstream by hash.
+if [[ ${#equivalents[@]} -ne 0 ]]; then
+    git branch -D "${equivalents[@]}" || status=$?
+fi
+
+exit "${status}"

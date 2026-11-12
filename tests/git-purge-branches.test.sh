@@ -8,6 +8,8 @@ SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/git-purge-branches"
 readonly SCRIPT
 # Status of git when it runs outside a repository
 readonly GIT_NOT_A_REPOSITORY=128
+# Status of the script for invalid options or arguments
+readonly USAGE_ERROR=2
 
 failures=0
 tests=0
@@ -66,6 +68,32 @@ function CreateUnmergedBranch()
     Git switch -q -
 }
 
+# Commits a new file with the given name on the current branch.
+function CommitFile()
+{
+    local name="$1"
+
+    echo "${name}" > "${repo}/${name}"
+    Git add "${name}"
+    Git commit -q -m "${name}"
+}
+
+# Creates a branch with a commit that the target lacks and copies the commit
+# onto the target, as a rebase and merge on a remote does. A commit on the
+# target before the copy gives the copy another hash.
+function CreateRebasedBranch()
+{
+    local name="$1"
+    local target="$2"
+
+    Git switch -q -c "${name}"
+    CommitFile "${name}"
+    Git switch -q "${target}"
+    CommitFile "${target}-${name}"
+    Git cherry-pick "${name}" > /dev/null
+    Git switch -q master
+}
+
 function Fail()
 {
     echo "    $*"
@@ -92,6 +120,19 @@ function ExpectBranches()
     if [[ ${actual} != "${expected}" ]]
     then
         Fail "expected branches '${expected}', got '${actual}'"
+    fi
+}
+
+function ExpectStdout()
+{
+    local expected="$*"
+    local actual
+    actual="$(< "${sandbox}/stdout")"
+    actual="${actual//$'\n'/ }"
+
+    if [[ ${actual} != "${expected}" ]]
+    then
+        Fail "expected stdout '${expected}', got '${actual}'"
     fi
 }
 
@@ -228,6 +269,186 @@ function TestDeletesBranchNamedLikeGivenTag()
     ExpectBranches master
 }
 
+function TestKeepsRebasedBranchByDefault()
+{
+    CreateRebasedBranch feature master
+    RunPurge
+    ExpectStatus 0
+    ExpectBranches feature master
+}
+
+function TestDeletesRebasedBranchWithEquivalent()
+{
+    CreateRebasedBranch feature master
+    RunPurge --equivalent
+    ExpectStatus 0
+    ExpectBranches master
+}
+
+function TestDeletesBranchRebasedOntoGivenCommit()
+{
+    Git branch release
+    CreateRebasedBranch feature release
+    RunPurge -e release
+    ExpectStatus 0
+    ExpectBranches master release
+}
+
+function TestDeletesRebasedBranchFromSubdirectoryWithEquivalent()
+{
+    mkdir "${repo}/subdirectory"
+    CreateRebasedBranch feature master
+    RunPurgeIn "${repo}/subdirectory" --equivalent
+    ExpectStatus 0
+    ExpectBranches master
+}
+
+function TestKeepsPartlyRebasedBranchWithEquivalent()
+{
+    CreateRebasedBranch feature master
+    Git switch -q feature
+    CommitFile unpicked
+    Git switch -q master
+    RunPurge --equivalent
+    ExpectStatus 0
+    ExpectBranches feature master
+}
+
+# git cherry treats every empty commit as equivalent to any other.
+function TestKeepsBranchOfEmptyCommitsWithEquivalent()
+{
+    CreateUnmergedBranch topic
+    Git commit -q --allow-empty -m other
+    RunPurge --equivalent
+    ExpectStatus 0
+    ExpectBranches master topic
+}
+
+# git cherry omits merge commits, so changes made in a merge, such as a
+# conflict resolution, have no equivalent it could check.
+function TestKeepsBranchWithChangingMergeWithEquivalent()
+{
+    Git branch side
+    Git switch -q -c feature
+    CommitFile feature
+    Git switch -q side
+    CommitFile side
+    Git switch -q feature
+    Git merge -q --no-commit side > /dev/null 2>&1
+    CommitFile resolution
+    Git switch -q master
+    CommitFile master-feature
+    Git cherry-pick side feature^ > /dev/null
+    Git branch -D -q side
+    RunPurge --equivalent
+    ExpectStatus 0
+    ExpectBranches feature master
+}
+
+function TestKeepsRebasedBranchOfOtherWorktreeWithEquivalent()
+{
+    CreateRebasedBranch feature master
+    Git worktree add -q "${sandbox}/worktree" feature
+    RunPurge --equivalent
+    ExpectStatus 0
+    ExpectBranches feature master
+}
+
+function TestDeletesRebasedBranchWhenMergedBranchIsRefused()
+{
+    Git config remote.origin.url "${repo}"
+    Git config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'
+    Git update-ref refs/remotes/origin/feature HEAD
+    Git commit -q --allow-empty -m unpushed
+    Git branch feature
+    Git config branch.feature.remote origin
+    Git config branch.feature.merge refs/heads/feature
+    CreateRebasedBranch rebased master
+    RunPurge --equivalent
+    ExpectStatus 1
+    ExpectBranches feature master
+}
+
+# A stale lock of the branch makes its deletion fail.
+function TestReportsFailureToDeleteRebasedBranch()
+{
+    CreateRebasedBranch rebased master
+    touch "${repo}/.git/refs/heads/rebased.lock"
+    RunPurge --equivalent
+    ExpectStatus 1
+    ExpectBranches master rebased
+}
+
+function TestDryRunListsMergedBranches()
+{
+    Git branch feature
+    Git branch other
+    RunPurge --dry-run
+    ExpectStatus 0
+    ExpectStdout feature other
+    ExpectBranches feature master other
+}
+
+function TestDryRunListsRebasedBranchesWithEquivalent()
+{
+    Git branch merged
+    CreateRebasedBranch rebased master
+    RunPurge -n -e
+    ExpectStatus 0
+    ExpectStdout merged rebased
+    ExpectBranches master merged rebased
+}
+
+function TestDryRunOmitsRebasedBranchesByDefault()
+{
+    Git branch merged
+    CreateRebasedBranch rebased master
+    RunPurge -n
+    ExpectStatus 0
+    ExpectStdout merged
+    ExpectBranches master merged rebased
+}
+
+function TestAcceptsOptionsAfterCommit()
+{
+    Git branch release
+    CreateRebasedBranch feature release
+    RunPurge release -e
+    ExpectStatus 0
+    ExpectBranches master release
+}
+
+function TestHelpPrintsUsage()
+{
+    Git branch feature
+    RunPurge --help
+    ExpectStatus 0
+    ExpectBranches feature master
+
+    if ! grep -qF -- '--equivalent' "${sandbox}/stdout"
+    then
+        Fail "expected usage with --equivalent on stdout, got '$(< "${sandbox}/stdout")'"
+    fi
+}
+
+function TestRejectsUnknownOption()
+{
+    Git branch feature
+    RunPurge --force
+    ExpectStatus "${USAGE_ERROR}"
+    ExpectStderrContains "error: unknown option '--force'"
+    ExpectBranches feature master
+}
+
+function TestRejectsSecondCommit()
+{
+    Git branch feature
+    RunPurge HEAD feature
+    ExpectStatus "${USAGE_ERROR}"
+    ExpectStderrContains "error: expected at most 1 commit, got 2"
+    ExpectBranches feature master
+}
+
 function TestReportsInvalidCommit()
 {
     Git branch feature
@@ -277,6 +498,23 @@ Run TestKeepsBranchGivenAsCommit
 Run TestKeepsBranchGivenAsFullRefName
 Run TestDeletesBranchAtGivenTag
 Run TestDeletesBranchNamedLikeGivenTag
+Run TestKeepsRebasedBranchByDefault
+Run TestDeletesRebasedBranchWithEquivalent
+Run TestDeletesBranchRebasedOntoGivenCommit
+Run TestDeletesRebasedBranchFromSubdirectoryWithEquivalent
+Run TestKeepsPartlyRebasedBranchWithEquivalent
+Run TestKeepsBranchOfEmptyCommitsWithEquivalent
+Run TestKeepsBranchWithChangingMergeWithEquivalent
+Run TestKeepsRebasedBranchOfOtherWorktreeWithEquivalent
+Run TestDeletesRebasedBranchWhenMergedBranchIsRefused
+Run TestReportsFailureToDeleteRebasedBranch
+Run TestDryRunListsMergedBranches
+Run TestDryRunListsRebasedBranchesWithEquivalent
+Run TestDryRunOmitsRebasedBranchesByDefault
+Run TestAcceptsOptionsAfterCommit
+Run TestHelpPrintsUsage
+Run TestRejectsUnknownOption
+Run TestRejectsSecondCommit
 Run TestReportsInvalidCommit
 Run TestReportsFailureOutsideRepository
 
