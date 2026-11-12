@@ -10,6 +10,10 @@ readonly SCRIPT
 readonly GIT_NOT_A_REPOSITORY=128
 # Status of the script for invalid options or arguments
 readonly USAGE_ERROR=2
+# Seconds after which a run of the script counts as hung. A run takes
+# milliseconds, so the limit only ends runs that never finish, even on a
+# loaded machine.
+readonly HANG_TIMEOUT=60
 
 failures=0
 tests=0
@@ -42,13 +46,14 @@ function TearDown()
 }
 
 # Runs the script under test in the given directory with the remaining
-# arguments and stores its exit status.
+# arguments and stores its exit status, which is that of timeout if the run
+# hangs.
 function RunPurgeIn()
 {
     local directory="$1"
     shift
 
-    (cd "${directory}" && /bin/bash "${SCRIPT}" "$@") \
+    (cd "${directory}" && timeout "${HANG_TIMEOUT}" /bin/bash "${SCRIPT}" "$@") \
         > "${sandbox}/stdout" 2> "${sandbox}/stderr"
     status=$?
 }
@@ -409,6 +414,29 @@ function TestDryRunOmitsRebasedBranchesByDefault()
     ExpectBranches master merged rebased
 }
 
+# Runs a dry run with the given bundle of -e and -n.
+function ExpectBundledOptionsAccepted()
+{
+    local options="$1"
+
+    Git branch merged
+    CreateRebasedBranch rebased master
+    RunPurge "${options}"
+    ExpectStatus 0
+    ExpectStdout merged rebased
+    ExpectBranches master merged rebased
+}
+
+function TestAcceptsBundledShortOptions()
+{
+    ExpectBundledOptionsAccepted -en
+}
+
+function TestAcceptsBundledShortOptionsInEitherOrder()
+{
+    ExpectBundledOptionsAccepted -ne
+}
+
 function TestAcceptsOptionsAfterCommit()
 {
     Git branch release
@@ -437,6 +465,15 @@ function TestRejectsUnknownOption()
     RunPurge --force
     ExpectStatus "${USAGE_ERROR}"
     ExpectStderrContains "error: unknown option '--force'"
+    ExpectBranches feature master
+}
+
+function TestRejectsUnknownOptionInBundle()
+{
+    Git branch feature
+    RunPurge -ex
+    ExpectStatus "${USAGE_ERROR}"
+    ExpectStderrContains "error: unknown option '-x'"
     ExpectBranches feature master
 }
 
@@ -511,9 +548,12 @@ Run TestReportsFailureToDeleteRebasedBranch
 Run TestDryRunListsMergedBranches
 Run TestDryRunListsRebasedBranchesWithEquivalent
 Run TestDryRunOmitsRebasedBranchesByDefault
+Run TestAcceptsBundledShortOptions
+Run TestAcceptsBundledShortOptionsInEitherOrder
 Run TestAcceptsOptionsAfterCommit
 Run TestHelpPrintsUsage
 Run TestRejectsUnknownOption
+Run TestRejectsUnknownOptionInBundle
 Run TestRejectsSecondCommit
 Run TestReportsInvalidCommit
 Run TestReportsFailureOutsideRepository

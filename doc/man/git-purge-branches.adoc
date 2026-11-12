@@ -31,6 +31,8 @@ The local branch then keeps the original commits and is not merged.
 
 == Options
 
+Short options may be combined, such as *-en* for *-e -n*.
+
 *-n*, *--dry-run*::
 List the branches that would be deleted, one name per line, and delete nothing.
 With *--equivalent*, the list includes the branches it selects.

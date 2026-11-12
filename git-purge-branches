@@ -41,6 +41,12 @@ while (($# > 0)); do
             positional+=("$@")
             break
             ;;
+        -[!-]?*)
+            # Splits a bundle of short options such as -en into its first
+            # option and the rest, which are parsed in turn.
+            set -- "${1:0:2}" "-${1:2}" "${@:2}"
+            continue
+            ;;
         -*)
             echo "error: unknown option '$1'" >&2
             Usage >&2
