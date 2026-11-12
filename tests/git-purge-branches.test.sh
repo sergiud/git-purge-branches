@@ -8,8 +8,13 @@
 # with the global and system Git configuration disabled, so the user's
 # configuration cannot change the outcome.
 
-SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/git-purge-branches"
-readonly SCRIPT
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+readonly ROOT_DIR
+readonly SCRIPT="${ROOT_DIR}/git-purge-branches"
+readonly COMPLETION="${ROOT_DIR}/completion/git-purge-branches.bash"
+# The main script of bash-completion, which loads completions on demand
+BASH_COMPLETION="$(pkg-config --variable=completionsdir bash-completion)/../bash_completion"
+readonly BASH_COMPLETION
 # Status of git when it runs outside a repository
 readonly GIT_NOT_A_REPOSITORY=128
 # Status of the script for invalid options or arguments
@@ -589,6 +594,112 @@ function TestReportsFailureOutsideRepository()
     ExpectStderrContains "error: failed to list branches"
 }
 
+# Completes the last of the given words of a command line in the test
+# repository, with the completion installed in the user directory of
+# bash-completion, which loads it on demand. Stores the candidates in stdout,
+# one per line without the trailing space that ends a complete word.
+function Complete()
+{
+    local user_dir="${sandbox}/bash-completion"
+
+    mkdir -p "${user_dir}/completions"
+    ln -sf "${COMPLETION}" "${user_dir}/completions/git-purge-branches.bash"
+
+    # shellcheck disable=SC2016 # the inner shell expands the variables
+    (cd "${repo}" && BASH_COMPLETION_USER_DIR="${user_dir}" \
+        timeout "${HANG_TIMEOUT}" bash --norc --noprofile -c '
+            source "$1"
+            shift
+            COMP_WORDS=("$@")
+            COMP_CWORD=$(($# - 1))
+            COMP_LINE="$*"
+            COMP_POINT=${#COMP_LINE}
+            _completion_loader "$1"
+            spec="$(complete -p "$1")" || exit 1
+            function="${spec##* -F }"
+            function="${function%% *}"
+            "${function}" "$1" "${COMP_WORDS[COMP_CWORD]}" "${COMP_WORDS[COMP_CWORD - 1]}"
+            printf "%s\n" "${COMPREPLY[@]%" "}"
+        ' completion "${BASH_COMPLETION}" "$@") \
+        > "${sandbox}/stdout" 2> "${sandbox}/stderr"
+    status=$?
+}
+
+function TestCompletesLongOptions()
+{
+    Complete git purge-branches --
+    ExpectStatus 0
+    ExpectStdout --dry-run --equivalent --help
+}
+
+function TestCompletesLongOptionsForDash()
+{
+    Complete git purge-branches -
+    ExpectStatus 0
+    ExpectStdout --dry-run --equivalent --help
+}
+
+function TestCompletesOptionWithPrefix()
+{
+    Complete git purge-branches --e
+    ExpectStatus 0
+    ExpectStdout --equivalent
+}
+
+function TestCompletesBranchAsCommit()
+{
+    Git branch feature
+    Complete git purge-branches f
+    ExpectStatus 0
+    ExpectStdout feature
+}
+
+function TestCompletesTagAsCommit()
+{
+    Git tag v1
+    Complete git purge-branches v
+    ExpectStatus 0
+    ExpectStdout v1
+}
+
+function TestCompletesCommitAfterOption()
+{
+    Git branch feature
+    Complete git purge-branches -n f
+    ExpectStatus 0
+    ExpectStdout feature
+}
+
+function TestCompletesCommitAfterDoubleDash()
+{
+    Git branch feature
+    Complete git purge-branches -- f
+    ExpectStatus 0
+    ExpectStdout feature
+}
+
+function TestCompletesNoOptionAfterDoubleDash()
+{
+    Complete git purge-branches -- --
+    ExpectStatus 0
+    ExpectStdout ""
+}
+
+function TestCompletesOptionOfStandaloneCommand()
+{
+    Complete git-purge-branches --e
+    ExpectStatus 0
+    ExpectStdout --equivalent
+}
+
+function TestCompletesCommitOfStandaloneCommand()
+{
+    Git branch feature
+    Complete git-purge-branches f
+    ExpectStatus 0
+    ExpectStdout feature
+}
+
 function Run()
 {
     local name="$1"
@@ -651,6 +762,16 @@ Run TestKeepsExemptBranchWithSlashInName
 Run TestReportsInvalidDeleteMerged
 Run TestReportsInvalidCommit
 Run TestReportsFailureOutsideRepository
+Run TestCompletesLongOptions
+Run TestCompletesLongOptionsForDash
+Run TestCompletesOptionWithPrefix
+Run TestCompletesBranchAsCommit
+Run TestCompletesTagAsCommit
+Run TestCompletesCommitAfterOption
+Run TestCompletesCommitAfterDoubleDash
+Run TestCompletesNoOptionAfterDoubleDash
+Run TestCompletesOptionOfStandaloneCommand
+Run TestCompletesCommitOfStandaloneCommand
 
 echo "${failures} of ${tests} tests failed"
 [[ ${failures} -eq 0 ]]

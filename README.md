@@ -32,6 +32,14 @@ $ just man
 which writes it below `man/`, where `man` finds it while this directory is in
 `PATH`. Then `git purge-branches --help` or `man git-purge-branches` shows it.
 
+For Bash completion of options and commits, link the completion into the user
+directory of bash-completion, which loads it on demand:
+
+```console
+$ mkdir -p ~/.local/share/bash-completion/completions
+$ ln -s "$PWD/completion/git-purge-branches.bash" ~/.local/share/bash-completion/completions/
+```
+
 Run the tests with `just test`.
 
 ## License
