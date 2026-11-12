@@ -22,6 +22,8 @@ the exit status and how the command differs from
 
 ## Installation
 
+The recipes need [just](https://just.systems) 1.46 or later.
+
 `just install` copies the script, its manual page and the completions for
 Bash, zsh and fish below a prefix, `/usr/local` when run as root and
 `~/.local` otherwise. `--prefix` selects another prefix, and `DESTDIR` stages

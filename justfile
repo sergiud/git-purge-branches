@@ -16,9 +16,15 @@ man:
 test:
     ./tests/git-purge-branches.test.sh
 
-# Checks that every file states its copyright and license as REUSE requires.
+# Checks that every file states its copyright and license as REUSE requires,
+# and the scripts and completions with the linters and formatters of their
+# shells.
 lint:
     reuse lint
+    shellcheck --enable=all --shell=bash git-purge-branches scripts/*.sh tests/*.sh completion/*.bash
+    zsh --no-exec completion/_git-purge-branches tests/complete.zsh
+    fish --no-execute completion/*.fish
+    fish_indent --check completion/*.fish
 
 # Installs the script, its manual page and the completions below the prefix.
 [arg("prefix", long="prefix", help="installation prefix, /usr/local for root and ~/.local otherwise")]

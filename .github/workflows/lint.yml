@@ -1,0 +1,29 @@
+# SPDX-FileCopyrightText: 2026 Sergiu Deitsch
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Checks the copyright and license of every file, and the scripts and
+# completions with the linters and formatters of their shells.
+name: Lint
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-26.04
+    steps:
+      - run: sudo apt-get update
+      - run: >-
+          sudo apt-get install --yes --no-install-recommends git pipx reuse
+          shellcheck zsh fish
+      # The recipes take options, which just supports from 1.46, a release newer
+      # than that of Ubuntu.
+      - run: sudo pipx install --global rust-just==1.59.0
+      - uses: actions/checkout@v7
+      # The recipe of the justfile runs the checks, so that they are listed once.
+      - run: just lint
