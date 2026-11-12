@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Sergiu Deitsch
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 = git-purge-branches(1)
 :doctype: manpage
 :manmanual: Git Manual

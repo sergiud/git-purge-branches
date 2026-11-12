@@ -1,2 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Sergiu Deitsch
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 # Manual pages that just man generates from doc/man
 /man/man[1-9]/*.[1-9]

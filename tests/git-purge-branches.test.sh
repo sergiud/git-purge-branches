@@ -1,5 +1,9 @@
 #!/bin/bash
+
+# SPDX-FileCopyrightText: 2026 Sergiu Deitsch
 #
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 # Tests for git-purge-branches. Each test runs the script in a new repository
 # with the global and system Git configuration disabled, so the user's
 # configuration cannot change the outcome.

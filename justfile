@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Sergiu Deitsch
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 man_dir := "man/man1"
 
 # Converts the AsciiDoc manual pages to troff below man, where man finds them
@@ -18,3 +22,8 @@ man:
 
 test:
     ./tests/git-purge-branches.test.sh
+
+# Checks that every file states its copyright and license as the REUSE
+# specification requires.
+lint:
+    reuse lint
