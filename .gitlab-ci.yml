@@ -15,7 +15,7 @@ lint:
     - apt-get update
     - >-
       apt-get install --yes --no-install-recommends git pipx reuse
-      shellcheck zsh fish
+      shellcheck shfmt zsh fish
     # The recipes take options, which just supports from 1.46, a release newer
     # than that of Ubuntu.
     - pipx install --global rust-just==1.59.0

@@ -5,6 +5,9 @@
 # Installation prefix, /usr/local with root privileges and ~/.local otherwise
 default_prefix := if `id -u` == "0" { "/usr/local" } else { home_directory() / ".local" }
 
+# The Bash scripts, which the linters check
+shell_scripts := "git-purge-branches scripts/*.sh tests/*.sh completion/*.bash"
+
 # Components of scripts/install.sh that the recipes install and uninstall
 completions := "bash zsh fish"
 components := "script man " + completions
@@ -21,7 +24,8 @@ test:
 # shells.
 lint:
     reuse lint
-    shellcheck --enable=all --shell=bash git-purge-branches scripts/*.sh tests/*.sh completion/*.bash
+    shellcheck --enable=all --shell=bash {{ shell_scripts }}
+    shfmt --diff {{ shell_scripts }}
     zsh --no-exec completion/_git-purge-branches tests/complete.zsh
     fish --no-execute completion/*.fish
     fish_indent --check completion/*.fish
