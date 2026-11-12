@@ -47,6 +47,13 @@ For zsh, add the `completion` directory to `fpath` in `~/.zshrc` before
 fpath=(~/path/to/git-purge-branches/completion $fpath)
 ```
 
+For fish, link the completion into the completions directory of fish:
+
+```console
+$ mkdir -p ~/.config/fish/completions
+$ ln -s "$PWD/completion/git-purge-branches.fish" ~/.config/fish/completions/
+```
+
 Run the tests with `just test`.
 
 ## License

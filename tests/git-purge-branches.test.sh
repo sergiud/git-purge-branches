@@ -13,6 +13,7 @@ readonly ROOT_DIR
 readonly SCRIPT="${ROOT_DIR}/git-purge-branches"
 readonly COMPLETION="${ROOT_DIR}/completion/git-purge-branches.bash"
 readonly ZSH_COMPLETION="${ROOT_DIR}/completion/_git-purge-branches"
+readonly FISH_COMPLETION="${ROOT_DIR}/completion/git-purge-branches.fish"
 # The main script of bash-completion, which loads completions on demand
 BASH_COMPLETION="$(pkg-config --variable=completionsdir bash-completion)/../bash_completion"
 readonly BASH_COMPLETION
@@ -817,6 +818,123 @@ function TestZshCompletesCommitOfStandaloneCommand()
     ExpectStdout topic
 }
 
+# Completes the given command line in fish in the test repository, with the
+# completion in a directory in front of fish_complete_path and the script in
+# PATH, as the completion of git requires to forward git purge-branches to it.
+# Stores the matches without their descriptions in stdout, one per line in
+# sorted order.
+function CompleteFish()
+{
+    local completion_dir="${sandbox}/fish-completion"
+
+    mkdir -p "${completion_dir}"
+    ln -sf "${FISH_COMPLETION}" "${completion_dir}/git-purge-branches.fish"
+
+    # shellcheck disable=SC2016 # fish expands the variables
+    (cd "${repo}" && PATH="${ROOT_DIR}:${PATH}" timeout "${HANG_TIMEOUT}" \
+        fish --no-config -c '
+            set --prepend fish_complete_path $argv[1]
+            complete --do-complete $argv[2]
+        ' "${completion_dir}" "$*") \
+        > "${sandbox}/completions" 2> "${sandbox}/stderr"
+    status=$?
+
+    local -a completions
+    readarray -t completions < "${sandbox}/completions"
+    # Each completion is a match and a description separated by a tab.
+    printf '%s\n' "${completions[@]%%$'\t'*}" > "${sandbox}/matches"
+    LC_ALL=C sort --output="${sandbox}/stdout" "${sandbox}/matches"
+}
+
+function TestFishCompletesLongOptions()
+{
+    CompleteFish git purge-branches --
+    ExpectStatus 0
+    ExpectStdout --dry-run --equivalent --help
+}
+
+function TestFishCompletesOptionWithPrefix()
+{
+    CompleteFish git purge-branches --e
+    ExpectStatus 0
+    ExpectStdout --equivalent
+}
+
+function TestFishOmitsGivenOptions()
+{
+    CompleteFish git purge-branches -n -e --
+    ExpectStatus 0
+    ExpectStdout --help
+}
+
+function TestFishCompletesBranchAsCommit()
+{
+    Git branch topic
+    CompleteFish git purge-branches to
+    ExpectStatus 0
+    ExpectStdout topic
+}
+
+function TestFishCompletesTagAsCommit()
+{
+    Git tag v1
+    CompleteFish git purge-branches v
+    ExpectStatus 0
+    ExpectStdout v1
+}
+
+function TestFishCompletesCommitAfterOption()
+{
+    Git branch topic
+    CompleteFish git purge-branches -n to
+    ExpectStatus 0
+    ExpectStdout topic
+}
+
+# A file of the same prefix shows a fallback to the completion of files.
+function TestFishCompletesNoSecondCommit()
+{
+    Git branch topic
+    touch "${repo}/toolbox"
+    CompleteFish git purge-branches topic to
+    ExpectStatus 0
+    ExpectStdout ""
+}
+
+# The completion of git offers its own --help for every git command line, so
+# only the standalone command shows that no option follows --help.
+function TestFishCompletesNoOptionAfterHelp()
+{
+    CompleteFish git-purge-branches --help --
+    ExpectStatus 0
+    ExpectStdout ""
+}
+
+# The completion of git lists no refs if --help or -h is on the line, since it
+# takes either for a global option of git, but it lists them for a bundle.
+function TestFishCompletesNothingAfterHelp()
+{
+    Git branch topic
+    CompleteFish git-purge-branches -nh ''
+    ExpectStatus 0
+    ExpectStdout ""
+}
+
+function TestFishCompletesOptionOfStandaloneCommand()
+{
+    CompleteFish git-purge-branches --e
+    ExpectStatus 0
+    ExpectStdout --equivalent
+}
+
+function TestFishCompletesCommitOfStandaloneCommand()
+{
+    Git branch topic
+    CompleteFish git-purge-branches to
+    ExpectStatus 0
+    ExpectStdout topic
+}
+
 function Run()
 {
     local name="$1"
@@ -902,6 +1020,17 @@ Run TestZshCompletesNoSecondCommit
 Run TestZshCompletesNothingAfterHelp
 Run TestZshCompletesOptionOfStandaloneCommand
 Run TestZshCompletesCommitOfStandaloneCommand
+Run TestFishCompletesLongOptions
+Run TestFishCompletesOptionWithPrefix
+Run TestFishOmitsGivenOptions
+Run TestFishCompletesBranchAsCommit
+Run TestFishCompletesTagAsCommit
+Run TestFishCompletesCommitAfterOption
+Run TestFishCompletesNoSecondCommit
+Run TestFishCompletesNoOptionAfterHelp
+Run TestFishCompletesNothingAfterHelp
+Run TestFishCompletesOptionOfStandaloneCommand
+Run TestFishCompletesCommitOfStandaloneCommand
 
 echo "${failures} of ${tests} tests failed"
 [[ ${failures} -eq 0 ]]
