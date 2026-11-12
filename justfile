@@ -19,14 +19,27 @@ man:
 test:
     ./tests/git-purge-branches.test.sh
 
-# Checks that every file states its copyright and license as REUSE requires,
-# and the scripts and completions with the linters and formatters of their
-# shells.
-lint:
+# Runs every check of the copyright, the license and the scripts.
+lint: lint-reuse lint-shellcheck lint-shfmt lint-zsh lint-fish
+
+# Checks that every file states its copyright and license as REUSE requires.
+lint-reuse:
     reuse lint
+
+# Checks the Bash scripts for defects.
+lint-shellcheck:
     shellcheck --enable=all --shell=bash {{ shell_scripts }}
+
+# Checks the format of the Bash scripts.
+lint-shfmt:
     shfmt --diff {{ shell_scripts }}
+
+# Checks the syntax of the zsh completion and its test harness.
+lint-zsh:
     zsh --no-exec completion/_git-purge-branches tests/complete.zsh
+
+# Checks the syntax and the format of the fish completion.
+lint-fish:
     fish --no-execute completion/*.fish
     fish_indent --check completion/*.fish
 
