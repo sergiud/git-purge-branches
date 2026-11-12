@@ -18,9 +18,10 @@ git-purge-branches - delete local branches merged into a commit
 Deletes the local branches merged into _<commit>_, `HEAD` by default.
 A branch is merged if its tip is reachable from _<commit>_.
 
-Two kinds of branches are always kept.
+Three kinds of branches are always kept.
 Branches checked out in any worktree are kept, which includes the current branch.
 Every branch is merged into itself, so a branch given as _<commit>_ is kept as well.
+A branch exempt by *branch.<name>.deleteMerged* is kept, as described under CONFIGURATION.
 
 Merged branches are deleted with *git branch -d*, which refuses a branch that is not merged into its upstream or, without an upstream, into `HEAD`.
 A branch merged into _<commit>_ can therefore remain if _<commit>_ is not `HEAD`, or if its upstream lacks commits of the branch.
@@ -62,7 +63,15 @@ The remaining branches are still deleted.
 *2*::
 An unknown option or more than one _<commit>_ was given.
 
-Any other status is that of *git for-each-ref* when listing the branches fails, such as *128* outside a repository or for an invalid _<commit>_.
+Any other status is that of *git* when listing the branches or reading their configuration fails, such as *128* outside a repository, for an invalid _<commit>_ or for a *branch.<name>.deleteMerged* that is not a boolean.
+No branch is deleted in that case.
+
+== Configuration
+
+*branch.<name>.deleteMerged*::
+If false, branch _<name>_ is never deleted, not even with *--equivalent*.
+Defaults to true.
+*git branch --delete-merged* honors the same setting.
 
 == Examples
 
@@ -79,6 +88,18 @@ $ git pull --prune
 $ git purge-branches --dry-run --equivalent
 $ git purge-branches --equivalent
 ----
+
+== Comparison with git branch --delete-merged
+
+*git branch --delete-merged* _<pattern>_ also deletes merged branches, but selects them by their upstream instead of by a commit.
+It deletes a branch only if the configured upstream of the branch matches _<pattern>_ and contains its tip.
+It keeps a branch without an upstream and a branch whose upstream no longer exists, such as a topic branch whose remote branch was deleted after the merge.
+It also keeps a branch whose push would update its upstream, such as a topic branch pushed to a remote branch of the same name.
+Commits that a remote rebased before merging count as unmerged.
+
+*git purge-branches* instead deletes the branches merged into _<commit>_ whether they have an upstream or not, within the checks of *git branch -d* described above, and with *--equivalent* also those that a remote rebased before merging.
+It cleans up topic branches whose remote branches were merged and deleted.
+*git branch --delete-merged* cleans up local branches that track a branch of a remote, such as its main branch, once their work has landed there.
 
 == See also
 

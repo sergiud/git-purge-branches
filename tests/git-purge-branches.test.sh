@@ -486,6 +486,88 @@ function TestRejectsSecondCommit()
     ExpectBranches feature master
 }
 
+function TestKeepsMergedBranchExemptByConfig()
+{
+    Git branch feature
+    Git branch other
+    Git config branch.feature.deleteMerged false
+    RunPurge
+    ExpectStatus 0
+    ExpectBranches feature master
+}
+
+function TestKeepsRebasedBranchExemptByConfig()
+{
+    CreateRebasedBranch feature master
+    Git config branch.feature.deleteMerged false
+    RunPurge --equivalent
+    ExpectStatus 0
+    ExpectBranches feature master
+}
+
+function TestDryRunOmitsExemptBranches()
+{
+    Git branch merged
+    Git branch exempt
+    CreateRebasedBranch rebased master
+    Git config branch.exempt.deleteMerged false
+    Git config branch.rebased.deleteMerged false
+    RunPurge --dry-run --equivalent
+    ExpectStatus 0
+    ExpectStdout merged
+    ExpectBranches exempt master merged rebased
+}
+
+function TestDeletesBranchWithDeleteMergedTrue()
+{
+    Git branch feature
+    Git config branch.feature.deleteMerged true
+    RunPurge
+    ExpectStatus 0
+    ExpectBranches master
+}
+
+# Git accepts several spellings of a boolean.
+function TestKeepsBranchExemptByConfigSpelledNo()
+{
+    Git branch feature
+    Git config branch.feature.deleteMerged no
+    RunPurge
+    ExpectStatus 0
+    ExpectBranches feature master
+}
+
+# The last dot of the key separates the variable from a branch name that
+# contains dots.
+function TestKeepsExemptBranchWithDotInName()
+{
+    Git branch release.1
+    Git config branch.release.1.deleteMerged false
+    RunPurge
+    ExpectStatus 0
+    ExpectBranches master release.1
+}
+
+function TestKeepsExemptBranchWithSlashInName()
+{
+    Git branch topic/feature
+    Git config branch.topic/feature.deleteMerged false
+    RunPurge
+    ExpectStatus 0
+    ExpectBranches master topic/feature
+}
+
+function TestReportsInvalidDeleteMerged()
+{
+    Git branch feature
+    Git branch other
+    Git config branch.feature.deleteMerged maybe
+    RunPurge
+    ExpectStatus "${GIT_NOT_A_REPOSITORY}"
+    ExpectStderrContains "bad boolean config value 'maybe'"
+    ExpectBranches feature master other
+}
+
 function TestReportsInvalidCommit()
 {
     Git branch feature
@@ -555,6 +637,14 @@ Run TestHelpPrintsUsage
 Run TestRejectsUnknownOption
 Run TestRejectsUnknownOptionInBundle
 Run TestRejectsSecondCommit
+Run TestKeepsMergedBranchExemptByConfig
+Run TestKeepsRebasedBranchExemptByConfig
+Run TestDryRunOmitsExemptBranches
+Run TestDeletesBranchWithDeleteMergedTrue
+Run TestKeepsBranchExemptByConfigSpelledNo
+Run TestKeepsExemptBranchWithDotInName
+Run TestKeepsExemptBranchWithSlashInName
+Run TestReportsInvalidDeleteMerged
 Run TestReportsInvalidCommit
 Run TestReportsFailureOutsideRepository
 

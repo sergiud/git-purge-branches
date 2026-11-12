@@ -11,7 +11,8 @@ function Usage()
 usage: ${0##*/} [-n | --dry-run] [-e | --equivalent] [<commit>]
 
 Deletes the branches merged into <commit>, HEAD by default, except those
-checked out in any worktree and the branch given as <commit>.
+checked out in any worktree, the branch given as <commit> and those with
+branch.<name>.deleteMerged set to false.
 
   -n, --dry-run     list the branches that would be deleted instead
   -e, --equivalent  also delete branches whose commits all have an equivalent
@@ -70,15 +71,19 @@ commit="${positional[0]:-HEAD}"
 
 # Stores in the array listed the full ref names of the branches that the
 # for-each-ref filter given as the argument selects, except those checked out
-# in any worktree, which includes the current branch. Unlike the output of git
-# branch, the format is not affected by the user's color or column
-# configuration.
+# in any worktree, which includes the current branch, and those exempt with
+# branch.<name>.deleteMerged set to false, as for git branch --delete-merged.
+# Unlike the output of git branch, the format is not affected by the user's
+# color or column configuration.
 function ListBranches()
 {
     local filter="$1"
     local -i fd
     local -i pid
     local -i status=0
+    local ref
+    local delete_merged
+    local kept=()
 
     # shellcheck disable=SC2312 # wait reports the status of the substitution
     exec {fd}< <(git for-each-ref "${filter}" --omit-empty \
@@ -95,6 +100,19 @@ function ListBranches()
         echo "error: failed to list branches, git exited with status ${status}" >&2
         exit "${status}"
     fi
+
+    # git config reports a value that is not a boolean and fails, which ends
+    # the script before any branch is deleted.
+    for ref in "${listed[@]}"; do
+        delete_merged="$(git config --type=bool --default=true \
+            --get "branch.${ref#refs/heads/}.deleteMerged")"
+
+        if [[ ${delete_merged} == true ]]; then
+            kept+=("${ref}")
+        fi
+    done
+
+    listed=("${kept[@]}")
 }
 
 ListBranches "--merged=${commit}"
