@@ -5,9 +5,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 # Installs the given components of git-purge-branches below a prefix, such as
-# /usr/local or ~/.local, where git, man and the shells look for them. A
-# DESTDIR in the environment is prepended to the prefix, so that a package
-# build can stage the files.
+# /usr/local or ~/.local, where git, man and the shells look for them, or
+# removes them with --uninstall. A DESTDIR in the environment is prepended to
+# the prefix, so that a package build can stage the files.
 
 set -euo pipefail
 
@@ -20,20 +20,25 @@ readonly root_dir
 function Usage()
 {
     cat <<USAGE
-usage: ${0##*/} --prefix=<dir> <component>...
+usage: ${0##*/} [--uninstall] --prefix=<dir> <component>...
 
 Components: script, man, bash, zsh, fish. man installs the manual pages that
-build-man-pages.sh generated.
+build-man-pages.sh generated. --uninstall removes the files of the components
+and keeps their directories, which other packages may share.
 USAGE
 }
 
 prefix=
+declare -i uninstall=0
 components=()
 
 while (($# > 0)); do
     case "$1" in
         --prefix=*)
             prefix="${1#--prefix=}"
+            ;;
+        --uninstall)
+            uninstall=1
             ;;
         -h | --help)
             Usage
@@ -105,6 +110,10 @@ for component in "${components[@]}"; do
 done
 
 for index in "${!targets[@]}"; do
-    install -d "${targets[index]%/*}"
-    install -m "${modes[index]}" "${sources[index]}" "${targets[index]}"
+    if ((uninstall)); then
+        rm -f -- "${targets[index]}"
+    else
+        install -d "${targets[index]%/*}"
+        install -m "${modes[index]}" "${sources[index]}" "${targets[index]}"
+    fi
 done

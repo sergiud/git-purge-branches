@@ -35,7 +35,9 @@ $ DESTDIR=/tmp/stage just install --prefix=/usr
 
 `just install-completions` installs only the completions, and
 `just install-bash-completion`, `install-zsh-completion` and
-`install-fish-completion` only the one of a shell.
+`install-fish-completion` only the one of a shell. Each has an `uninstall`
+counterpart, such as `just uninstall-zsh-completion`, which removes the same
+files from the same prefix.
 
 Below `~/.local`, Git, `man`, Bash and fish find the files once `~/.local/bin`
 is in `PATH`. zsh searches only system directories, so add the user one to

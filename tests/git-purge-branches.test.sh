@@ -789,6 +789,111 @@ function TestInstallFishCompletionInstallsOnlyIt()
     ExpectNotInstalled "${sandbox}/prefix/${INSTALLED_ZSH_COMPLETION}"
 }
 
+function ExpectNothingInstalled()
+{
+    local prefix="$1"
+
+    ExpectNotInstalled "${prefix}/${INSTALLED_SCRIPT}"
+    ExpectNotInstalled "${prefix}/${INSTALLED_MAN_PAGE}"
+    ExpectNotInstalled "${prefix}/${INSTALLED_COMPLETION}"
+    ExpectNotInstalled "${prefix}/${INSTALLED_ZSH_COMPLETION}"
+    ExpectNotInstalled "${prefix}/${INSTALLED_FISH_COMPLETION}"
+}
+
+function TestUninstallRemovesInstalledFiles()
+{
+    RunJust install --prefix="${sandbox}/prefix"
+    RunJust uninstall --prefix="${sandbox}/prefix"
+    ExpectStatus 0
+    ExpectNothingInstalled "${sandbox}/prefix"
+}
+
+# The directories may hold files of other packages, such as the completions of
+# other commands.
+function TestUninstallKeepsOtherFiles()
+{
+    local other_completion="${sandbox}/prefix/${INSTALLED_ZSH_COMPLETION%/*}/_other"
+
+    RunJust install --prefix="${sandbox}/prefix"
+    touch "${other_completion}"
+    RunJust uninstall --prefix="${sandbox}/prefix"
+    ExpectStatus 0
+    ExpectNothingInstalled "${sandbox}/prefix"
+
+    if [[ ! -f ${other_completion} ]]
+    then
+        Fail "expected '${other_completion}' to remain"
+    fi
+}
+
+function TestUninstallSucceedsWithoutInstalledFiles()
+{
+    mkdir "${sandbox}/prefix"
+    RunJust uninstall --prefix="${sandbox}/prefix"
+    ExpectStatus 0
+    ExpectNothingInstalled "${sandbox}/prefix"
+}
+
+function TestUninstallDefaultsToLocalOfHomeWithoutRoot()
+{
+    FakeUserId 1000
+    RunJust install
+    RunJust uninstall
+    ExpectStatus 0
+    ExpectNothingInstalled "${sandbox}/home/.local"
+}
+
+# DESTDIR keeps the default prefix of root from pointing to the real one.
+function TestUninstallDefaultsToUsrLocalWithRoot()
+{
+    FakeUserId 0
+    DESTDIR="${sandbox}/stage" RunJust install
+    DESTDIR="${sandbox}/stage" RunJust uninstall
+    ExpectStatus 0
+    ExpectNothingInstalled "${sandbox}/stage/usr/local"
+}
+
+function TestUninstallCompletionsRemovesOnlyCompletions()
+{
+    RunJust install --prefix="${sandbox}/prefix"
+    RunJust uninstall-completions --prefix="${sandbox}/prefix"
+    ExpectStatus 0
+    ExpectScriptAndManPageInstalled "${sandbox}/prefix"
+    ExpectNotInstalled "${sandbox}/prefix/${INSTALLED_COMPLETION}"
+    ExpectNotInstalled "${sandbox}/prefix/${INSTALLED_ZSH_COMPLETION}"
+    ExpectNotInstalled "${sandbox}/prefix/${INSTALLED_FISH_COMPLETION}"
+}
+
+function TestUninstallBashCompletionRemovesOnlyIt()
+{
+    RunJust install-completions --prefix="${sandbox}/prefix"
+    RunJust uninstall-bash-completion --prefix="${sandbox}/prefix"
+    ExpectStatus 0
+    ExpectNotInstalled "${sandbox}/prefix/${INSTALLED_COMPLETION}"
+    ExpectInstalledFile "${sandbox}/prefix/${INSTALLED_ZSH_COMPLETION}" 644 "${ZSH_COMPLETION}"
+    ExpectInstalledFile "${sandbox}/prefix/${INSTALLED_FISH_COMPLETION}" 644 "${FISH_COMPLETION}"
+}
+
+function TestUninstallZshCompletionRemovesOnlyIt()
+{
+    RunJust install-completions --prefix="${sandbox}/prefix"
+    RunJust uninstall-zsh-completion --prefix="${sandbox}/prefix"
+    ExpectStatus 0
+    ExpectNotInstalled "${sandbox}/prefix/${INSTALLED_ZSH_COMPLETION}"
+    ExpectInstalledFile "${sandbox}/prefix/${INSTALLED_COMPLETION}" 644 "${COMPLETION}"
+    ExpectInstalledFile "${sandbox}/prefix/${INSTALLED_FISH_COMPLETION}" 644 "${FISH_COMPLETION}"
+}
+
+function TestUninstallFishCompletionRemovesOnlyIt()
+{
+    RunJust install-completions --prefix="${sandbox}/prefix"
+    RunJust uninstall-fish-completion --prefix="${sandbox}/prefix"
+    ExpectStatus 0
+    ExpectNotInstalled "${sandbox}/prefix/${INSTALLED_FISH_COMPLETION}"
+    ExpectInstalledFile "${sandbox}/prefix/${INSTALLED_COMPLETION}" 644 "${COMPLETION}"
+    ExpectInstalledFile "${sandbox}/prefix/${INSTALLED_ZSH_COMPLETION}" 644 "${ZSH_COMPLETION}"
+}
+
 # Completes the last of the given words of a command line in the test
 # repository, with the completion installed below ~/.local of a home directory
 # in the sandbox, where bash-completion loads it on demand. Stores the
@@ -1201,6 +1306,15 @@ Run TestInstallCompletionsInstallsOnlyCompletions
 Run TestInstallBashCompletionInstallsOnlyIt
 Run TestInstallZshCompletionInstallsOnlyIt
 Run TestInstallFishCompletionInstallsOnlyIt
+Run TestUninstallRemovesInstalledFiles
+Run TestUninstallKeepsOtherFiles
+Run TestUninstallSucceedsWithoutInstalledFiles
+Run TestUninstallDefaultsToLocalOfHomeWithoutRoot
+Run TestUninstallDefaultsToUsrLocalWithRoot
+Run TestUninstallCompletionsRemovesOnlyCompletions
+Run TestUninstallBashCompletionRemovesOnlyIt
+Run TestUninstallZshCompletionRemovesOnlyIt
+Run TestUninstallFishCompletionRemovesOnlyIt
 Run TestCompletesLongOptions
 Run TestCompletesLongOptionsForDash
 Run TestCompletesOptionWithPrefix
