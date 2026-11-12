@@ -9,3 +9,41 @@ code blocks as well. -->
 <style>
 #content strong { font-family: "Droid Sans Mono", "DejaVu Sans Mono", monospace; }
 </style>
+<meta name="manual-version" content="{revnumber}">
+<!-- Lists the versions of the published site of all releases below the title,
+which versions.json at the root of the site names. The page lies at the root
+or below its version. -->
+<script>
+document.addEventListener("DOMContentLoaded", async () => {
+  const version = document.querySelector('meta[name="manual-version"]').content;
+  const directory = location.pathname.replace(/[^/]*$/, "");
+  const root = directory.endsWith(`/${version}/`)
+    ? directory.slice(0, -(version.length + 1))
+    : directory;
+  let versions;
+
+  try {
+    const response = await fetch(root + 'versions.json');
+    versions = response.ok ? await response.json() : [];
+  } catch {
+    versions = [];
+  }
+
+  if (versions.length < 2) {
+    return;
+  }
+
+  const select = document.createElement("select");
+  select.setAttribute("aria-label", "Version of the manual");
+
+  for (const name of versions) {
+    select.add(new Option(name, `${root}${name}/`, false, name === version));
+  }
+
+  select.addEventListener("change", () => {
+    location.href = select.value;
+  });
+
+  document.querySelector("#header h1").after(select);
+});
+</script>

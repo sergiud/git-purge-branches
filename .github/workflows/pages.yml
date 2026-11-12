@@ -3,16 +3,18 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 # Publishes the manual page and the install script of a published release on
-# GitHub Pages, so that both match the version that users install. Pushes and
-# pull requests do not run it.
+# GitHub Pages, so that both match the version that users install. The branch
+# gh-pages keeps the manual pages of all releases, which the site serves below
+# their versions. Pushes and pull requests do not run it.
 name: Pages
 
 on:
   release:
     types: [published]
 
+# The workflow pushes the branch gh-pages.
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -35,11 +37,30 @@ jobs:
       # The recipes take options, which just supports from 1.46, a release newer
       # than that of Ubuntu.
       - run: sudo pipx install --global rust-just==1.59.0
+      # The tags of the history give the version that the page names and the
+      # site files it below.
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - run: just pages
+      - name: Add the release to the branch gh-pages
+        run: |
+          if git fetch origin gh-pages:gh-pages; then
+              git worktree add published gh-pages
+          else
+              git worktree add --orphan -b gh-pages published
+          fi
+          version="$(./scripts/version.sh version)"
+          ./scripts/publish-pages.sh --version="${version}" site published
+          git -C published add --all
+          git -C published \
+              -c user.name='github-actions[bot]' \
+              -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              commit --message="publish the manual of ${version}"
+          git -C published push origin gh-pages
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:
-          path: site
+          path: published
       - id: deployment
         uses: actions/deploy-pages@v5

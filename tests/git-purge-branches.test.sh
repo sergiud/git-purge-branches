@@ -1581,6 +1581,20 @@ function TestPagesHighlightExamples()
     ExpectPageContains 'git purge-branches <span style="color: #116329">--dry-run</span>'
 }
 
+# The HTML page names the version of its sources, so that the switcher of
+# versions of the published site selects it.
+function TestPagesNameVersion()
+{
+    local version
+
+    version="$("${ROOT_DIR}/scripts/version.sh" version)"
+    RunJust pages --output="${sandbox}/site"
+    ExpectStatus 0
+    ExpectPageContains "<meta name=\"manual-version\" content=\"${version}\">"
+    ExpectPageContains "Version ${version}"
+    ExpectPageContains "fetch(root + 'versions.json')"
+}
+
 # The HTML page links back to the project on GitHub from its corner.
 function TestPagesLinkToProject()
 {
@@ -1658,6 +1672,133 @@ function TestManPageNamesReferencesWithoutLinks()
     if grep -qE 'git-scm\.com|#(option|setting|configuration|description)' "${MAN_PAGE}"; then
         Fail "expected no addresses in '${MAN_PAGE}'"
     fi
+}
+
+# Creates the site of the given release in the sandbox, as just pages renders
+# it, with files that name the release.
+function CreateReleaseSite()
+{
+    local version="$1"
+    local site="${sandbox}/site-${version}"
+
+    mkdir -p "${site}"
+    echo "manual ${version}" >"${site}/index.html"
+    echo "install ${version}" >"${site}/install.sh"
+}
+
+# Runs scripts/publish-pages.sh with the given arguments and stores its exit
+# status.
+function RunPublishPages()
+{
+    timeout "${HANG_TIMEOUT}" "${ROOT_DIR}/scripts/publish-pages.sh" "$@" \
+        >"${sandbox}/stdout" 2>"${sandbox}/stderr"
+    status=$?
+}
+
+# Publishes the site of the given release, which CreateReleaseSite created, to
+# the published site in the sandbox.
+function PublishRelease()
+{
+    local version="$1"
+
+    RunPublishPages --version="${version}" "${sandbox}/site-${version}" "${sandbox}/published"
+}
+
+function ExpectFileContent()
+{
+    local path="$1"
+    local expected="$2"
+    local actual
+
+    if [[ ! -f ${path} ]]; then
+        Fail "expected file '${path}'"
+        return
+    fi
+
+    actual="$(<"${path}")"
+
+    if [[ ${actual} != "${expected}" ]]; then
+        Fail "expected '${expected}' in '${path}', got '${actual}'"
+    fi
+}
+
+function TestPublishPagesAddsFirstRelease()
+{
+    CreateReleaseSite 1.2.3
+    PublishRelease 1.2.3
+    ExpectStatus 0
+    ExpectFileContent "${sandbox}/published/1.2.3/index.html" "manual 1.2.3"
+    ExpectFileContent "${sandbox}/published/index.html" "manual 1.2.3"
+    ExpectFileContent "${sandbox}/published/install.sh" "install 1.2.3"
+    ExpectFileContent "${sandbox}/published/versions.json" '["1.2.3"]'
+}
+
+# The root serves the release published last, while the earlier ones stay
+# below their versions.
+function TestPublishPagesKeepsEarlierReleases()
+{
+    CreateReleaseSite 1.2.3
+    CreateReleaseSite 1.3.0
+    CreateReleaseSite 1.4.0
+    PublishRelease 1.2.3
+    PublishRelease 1.3.0
+    PublishRelease 1.4.0
+    ExpectStatus 0
+    ExpectFileContent "${sandbox}/published/1.2.3/index.html" "manual 1.2.3"
+    ExpectFileContent "${sandbox}/published/1.3.0/index.html" "manual 1.3.0"
+    ExpectFileContent "${sandbox}/published/index.html" "manual 1.4.0"
+    ExpectFileContent "${sandbox}/published/install.sh" "install 1.4.0"
+    ExpectFileContent "${sandbox}/published/versions.json" '["1.4.0","1.3.0","1.2.3"]'
+}
+
+# Publishing a release again replaces its site and moves it to the front.
+function TestPublishPagesRepublishesRelease()
+{
+    CreateReleaseSite 1.2.3
+    CreateReleaseSite 1.3.0
+    PublishRelease 1.2.3
+    PublishRelease 1.3.0
+    echo "manual 1.2.3 fixed" >"${sandbox}/site-1.2.3/index.html"
+    PublishRelease 1.2.3
+    ExpectStatus 0
+    ExpectFileContent "${sandbox}/published/1.2.3/index.html" "manual 1.2.3 fixed"
+    ExpectFileContent "${sandbox}/published/1.3.0/index.html" "manual 1.3.0"
+    ExpectFileContent "${sandbox}/published/versions.json" '["1.2.3","1.3.0"]'
+}
+
+# The published site may hold files of its own, such as the marker that turns
+# off Jekyll.
+function TestPublishPagesKeepsOtherFiles()
+{
+    mkdir -p "${sandbox}/published"
+    touch "${sandbox}/published/.nojekyll"
+    CreateReleaseSite 1.2.3
+    PublishRelease 1.2.3
+    ExpectStatus 0
+    ExpectExists "${sandbox}/published/.nojekyll"
+}
+
+function TestPublishPagesRejectsInvalidVersion()
+{
+    local version
+
+    for version in v1.2.3 1.2/3 ""; do
+        CreateReleaseSite 1.2.3
+        RunPublishPages --version="${version}" "${sandbox}/site-1.2.3" "${sandbox}/published"
+        ExpectStatus "${USAGE_ERROR}"
+        ExpectStderrContains "error: expected a version that starts with a digit"
+    done
+
+    ExpectNotInstalled "${sandbox}/published"
+}
+
+function TestPublishPagesRequiresDirectories()
+{
+    CreateReleaseSite 1.2.3
+    RunPublishPages --version=1.2.3 "${sandbox}/site-1.2.3"
+    ExpectStatus "${USAGE_ERROR}"
+    ExpectStderrContains "error: expected the site and the published site"
+    ExpectNotInstalled "${sandbox}/published"
 }
 
 # Two builds of the same commit yield the same files, so that anyone can verify
@@ -2144,12 +2285,19 @@ Run TestPacmanContainsSources
 Run TestPagesRenderManualPage
 Run TestPagesSetLiteralInputInMonospace
 Run TestPagesHighlightExamples
+Run TestPagesNameVersion
 Run TestPagesLinkToProject
 Run TestPagesServeInstallScript
 Run TestPagesLinkGitCommandsToGitDocumentation
 Run TestPagesLinkOptionsAndSections
 Run TestManPageNamesReferencesWithoutLinks
 Run TestPackagesAreReproducible
+Run TestPublishPagesAddsFirstRelease
+Run TestPublishPagesKeepsEarlierReleases
+Run TestPublishPagesRepublishesRelease
+Run TestPublishPagesKeepsOtherFiles
+Run TestPublishPagesRejectsInvalidVersion
+Run TestPublishPagesRequiresDirectories
 Run TestGetInstallsLatestRelease
 Run TestGetInstallsGivenVersionBelowPrefix
 Run TestGetDefaultsToUsrLocalWithRoot
