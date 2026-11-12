@@ -6,17 +6,21 @@
 :doctype: manpage
 :manmanual: Git Manual
 :mansource: scripts
+:sectanchors:
+:docinfo: private-head,private-footer
 
 == Name
 
 git-purge-branches - delete local branches merged into a commit
 
+[#synopsis]
 == Synopsis
 
 [verse]
-*git purge-branches* [*-n* | *--dry-run*] [*-e* | *--equivalent*] [_<commit>_]
-*git purge-branches* *-h* | *--help*
+*git purge-branches* [<<option-dry-run,*-n*>> | <<option-dry-run,*--dry-run*>>] [<<option-equivalent,*-e*>> | <<option-equivalent,*--equivalent*>>] [<<argument-commit,_<commit>_>>]
+*git purge-branches* <<option-help,*-h*>> | <<option-help,*--help*>>
 
+[#description]
 == Description
 
 Deletes the local branches merged into _<commit>_, `HEAD` by default.
@@ -25,86 +29,94 @@ A branch is merged if its tip is reachable from _<commit>_.
 Three kinds of branches are always kept.
 Branches checked out in any worktree are kept, which includes the current branch.
 Every branch is merged into itself, so a branch given as _<commit>_ is kept as well.
-A branch exempt by *branch.<name>.deleteMerged* is kept, as described under CONFIGURATION.
+A branch exempt by <<setting-delete-merged,*branch.<name>.deleteMerged*>> is kept, as described under <<configuration,CONFIGURATION>>.
 
-Merged branches are deleted with *git branch -d*, which refuses a branch that is not merged into its upstream or, without an upstream, into `HEAD`.
+Merged branches are deleted with linkgit:git-branch[git branch -d], which refuses a branch that is not merged into its upstream or, without an upstream, into `HEAD`.
 A branch merged into _<commit>_ can therefore remain if _<commit>_ is not `HEAD`, or if its upstream lacks commits of the branch.
 
 A remote that rebases a branch before merging it, as GitLab and GitHub offer, merges copies of its commits with other hashes.
 The local branch then keeps the original commits and is not merged.
-*--equivalent* also deletes such branches.
+<<option-equivalent,*--equivalent*>> also deletes such branches.
 
+[#options]
 == Options
 
 Short options may be combined, such as *-en* for *-e -n*.
 
-*-n*, *--dry-run*::
+[[option-dry-run]]*-n*, *--dry-run*::
 List the branches that would be deleted, one name per line, and delete nothing.
-With *--equivalent*, the list includes the branches it selects.
-A merged branch that *git branch -d* would refuse is listed as well.
+With <<option-equivalent,*--equivalent*>>, the list includes the branches it selects.
+A merged branch that linkgit:git-branch[git branch -d] would refuse is listed as well.
 
-*-e*, *--equivalent*::
-Also delete branches whose commits all have an equivalent in _<commit>_, as *git cherry* determines by comparing the changes of commits.
-A branch that contains an empty commit or a merge commit is kept, since *git cherry* matches an empty commit with any other and omits merge commits, whose own changes it cannot compare.
-These branches are deleted with *git branch -D*, which discards the original commits.
+[[option-equivalent]]*-e*, *--equivalent*::
+Also delete branches whose commits all have an equivalent in _<commit>_, as linkgit:git-cherry[git cherry] determines by comparing the changes of commits.
+A branch that contains an empty commit or a merge commit is kept, since linkgit:git-cherry[git cherry] matches an empty commit with any other and omits merge commits, whose own changes it cannot compare.
+These branches are deleted with linkgit:git-branch[git branch -D], which discards the original commits.
 
-*-h*, *--help*::
+[[option-help]]*-h*, *--help*::
 Print a usage summary and exit.
 
-_<commit>_::
+[[argument-commit]]_<commit>_::
 The commit the branches are merged into, `HEAD` by default.
 Options may precede or follow it.
 
+[#exit-status]
 == Exit status
 
 *0*::
-All selected branches were deleted or, with *--dry-run*, listed.
+All selected branches were deleted or, with <<option-dry-run,*--dry-run*>>, listed.
 
 *1*::
-*git branch* failed to delete a branch.
+linkgit:git-branch[git branch] failed to delete a branch.
 The remaining branches are still deleted.
 
 *2*::
 An unknown option or more than one _<commit>_ was given.
 
-Any other status is that of *git* when listing the branches or reading their configuration fails, such as *128* outside a repository, for an invalid _<commit>_ or for a *branch.<name>.deleteMerged* that is not a boolean.
+Any other status is that of linkgit:git[git] when listing the branches or reading their configuration fails, such as *128* outside a repository, for an invalid _<commit>_ or for a <<setting-delete-merged,*branch.<name>.deleteMerged*>> that is not a boolean.
 No branch is deleted in that case.
 
+[#configuration]
 == Configuration
 
-*branch.<name>.deleteMerged*::
-If false, branch _<name>_ is never deleted, not even with *--equivalent*.
+[[setting-delete-merged]]*branch.<name>.deleteMerged*::
+If false, branch _<name>_ is never deleted, not even with <<option-equivalent,*--equivalent*>>.
 Defaults to true.
-*git branch --delete-merged* honors the same setting.
+linkgit:git-branch[git branch --delete-merged] honors the same setting.
 
+[#examples]
 == Examples
 
 Delete the branches merged into the current branch:
 
+[source,console]
 ----
 $ git purge-branches
 ----
 
 After updating the current branch, list the branches merged into it, including those that the remote rebased before merging, then delete them:
 
+[source,console]
 ----
 $ git pull --prune
 $ git purge-branches --dry-run --equivalent
 $ git purge-branches --equivalent
 ----
 
+[#comparison]
 == Comparison with git branch --delete-merged
 
-*git branch --delete-merged* _<pattern>_ also deletes merged branches, but selects them by their upstream instead of by a commit.
+linkgit:git-branch[git branch --delete-merged] _<pattern>_ also deletes merged branches, but selects them by their upstream instead of by a commit.
 It deletes a branch only if the configured upstream of the branch matches _<pattern>_ and contains its tip.
 It keeps a branch without an upstream and a branch whose upstream no longer exists, such as a topic branch whose remote branch was deleted after the merge.
 It also keeps a branch whose push would update its upstream, such as a topic branch pushed to a remote branch of the same name.
 Commits that a remote rebased before merging count as unmerged.
 
-*git purge-branches* instead deletes the branches merged into _<commit>_ whether they have an upstream or not, within the checks of *git branch -d* described above, and with *--equivalent* also those that a remote rebased before merging.
+*git purge-branches* instead deletes the branches merged into _<commit>_ whether they have an upstream or not, within the checks of linkgit:git-branch[git branch -d] <<description,described above>>, and with <<option-equivalent,*--equivalent*>> also those that a remote rebased before merging.
 It cleans up topic branches whose remote branches were merged and deleted.
-*git branch --delete-merged* cleans up local branches that track a branch of a remote, such as its main branch, once their work has landed there.
+linkgit:git-branch[git branch --delete-merged] cleans up local branches that track a branch of a remote, such as its main branch, once their work has landed there.
 
+[#see-also]
 == See also
 
-*git-branch*(1), *git-cherry*(1), *git-for-each-ref*(1)
+linkgit:git-branch[1], linkgit:git-cherry[1], linkgit:git-for-each-ref[1]

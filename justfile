@@ -111,7 +111,9 @@ tarball version="" output="dist": man
 pacman version="" output="dist": man
     ./scripts/package.sh --version={{ quote(version) }} --output={{ quote(output) }} pacman
 
-# Renders the manual page as the HTML page of the site for GitHub Pages.
+# Renders the manual page as the HTML page of the site for GitHub Pages, which
+# also serves the install script of the release.
 [arg("output", long="output", help="directory of the site")]
 pages output="site":
-    asciidoctor --backend html5 --failure-level WARN --out-file {{ quote(output / "index.html") }} doc/man/git-purge-branches.adoc
+    ./scripts/build-man-pages.sh --html={{ quote(output) }}
+    install -m 0644 install.sh {{ quote(output / "install.sh") }}

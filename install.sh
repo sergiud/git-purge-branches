@@ -7,7 +7,7 @@
 # Installs a release of git-purge-branches from GitHub below a prefix, or
 # removes it again, without a checkout:
 #
-#   curl -fsSL https://raw.githubusercontent.com/sergiud/git-purge-branches/master/install.sh | bash
+#   curl -fsSL https://sergiud.github.io/git-purge-branches/install.sh | bash
 #   curl -fsSL … | bash -s -- --prefix=/usr/local --version=1.2.3 --uninstall
 
 set -euo pipefail

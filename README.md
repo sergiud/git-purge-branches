@@ -25,7 +25,7 @@ cleans up topic branches whose remote branches were merged and deleted.
 ## Installation
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sergiud/git-purge-branches/master/install.sh | bash
+curl -fsSL https://sergiud.github.io/git-purge-branches/install.sh | bash
 ```
 
 installs the latest release below `~/.local`, or below `/usr/local` as root.

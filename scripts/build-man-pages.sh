@@ -6,7 +6,9 @@
 
 # Converts the AsciiDoc manual pages to troff below man, where man finds them
 # while the project directory is in PATH, and lints the result. groff exits
-# with 0 even if it warns, so any diagnostic fails the script.
+# with 0 even if it warns, so any diagnostic fails the script. With
+# --html=<dir>, renders the manual page as index.html into the directory
+# instead, as GitHub Pages serves it.
 
 set -euo pipefail
 
@@ -14,7 +16,34 @@ root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly root_dir
 readonly man_dir="${root_dir}/man/man1"
 
-asciidoctor --backend manpage --failure-level WARN --destination-dir "${man_dir}" "${root_dir}"/doc/man/*.adoc
+html_dir=
+
+if [[ $# -eq 1 && $1 == --html=* ]]; then
+    html_dir="${1#--html=}"
+elif (($# != 0)); then
+    echo "usage: ${0##*/} [--html=<dir>]" >&2
+    exit 2
+fi
+
+# The pages show the date of the commit unless a package build sets another,
+# so that every build of a commit yields the same pages.
+if [[ -z ${SOURCE_DATE_EPOCH:-} ]]; then
+    SOURCE_DATE_EPOCH="$("${root_dir}/scripts/version.sh" date)"
+    export SOURCE_DATE_EPOCH
+fi
+
+# The extension provides the macro linkgit of the documentation of Git.
+readonly asciidoctor=(asciidoctor --require "${root_dir}/doc/man/linkgit.rb" --failure-level WARN)
+
+# Only HTML highlights the examples, so that manual pages build without Rouge.
+if [[ -n ${html_dir} ]]; then
+    "${asciidoctor[@]}" --backend html5 --attribute source-highlighter=rouge \
+        --attribute rouge-css=style --out-file "${html_dir}/index.html" \
+        "${root_dir}/doc/man/git-purge-branches.adoc"
+    exit 0
+fi
+
+"${asciidoctor[@]}" --backend manpage --destination-dir "${man_dir}" "${root_dir}"/doc/man/*.adoc
 
 for page in "${man_dir}"/*.1; do
     diagnostics="$(groff -man -rCHECKSTYLE=3 -ww -z "${page}" 2>&1)"

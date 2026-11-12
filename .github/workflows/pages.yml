@@ -2,9 +2,9 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-# Publishes the manual page of a published release on GitHub Pages, so that
-# the page matches the version that users install. Pushes and pull requests do
-# not run it.
+# Publishes the manual page and the install script of a published release on
+# GitHub Pages, so that both match the version that users install. Pushes and
+# pull requests do not run it.
 name: Pages
 
 on:
@@ -29,7 +29,9 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - run: sudo apt-get update
-      - run: sudo apt-get install --yes --no-install-recommends pipx asciidoctor
+      - run: >-
+          sudo apt-get install --yes --no-install-recommends pipx asciidoctor
+          ruby-rouge
       # The recipes take options, which just supports from 1.46, a release newer
       # than that of Ubuntu.
       - run: sudo pipx install --global rust-just==1.59.0

@@ -40,7 +40,7 @@ tests:
     - apt-get update
     - >-
       apt-get install --yes --no-install-recommends git pipx
-      bash-completion zsh fish asciidoctor groff-base pkgconf debhelper
+      bash-completion zsh fish asciidoctor ruby-rouge groff-base pkgconf debhelper
       makepkg pacman-package-manager libarchive-tools zstd
     # The recipes take options, which just supports from 1.46, a release newer
     # than that of Ubuntu.

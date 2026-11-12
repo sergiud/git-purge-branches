@@ -1536,8 +1536,128 @@ function TestPagesRenderManualPage()
     ExpectExists "${page}"
     # The title, the synopsis and the last section show the whole manual.
     grep -q '<title>git-purge-branches(1)</title>' "${page}" || Fail "expected the title of the manual in '${page}'"
-    grep -q 'git purge-branches</strong> \[<strong>-n</strong>' "${page}" || Fail "expected the synopsis in '${page}'"
+    grep -qF 'git purge-branches</strong> [<a href="#option-dry-run"><strong>-n</strong></a>' "${page}" || Fail "expected the synopsis in '${page}'"
     grep -q '>See also<' "${page}" || Fail "expected the last section in '${page}'"
+}
+
+# Expects the HTML page of the manual in the sandbox to contain the given
+# markup.
+function ExpectPageContains()
+{
+    local markup="$1"
+    local page="${sandbox}/site/index.html"
+
+    if ! grep -qF -- "${markup}" "${page}"; then
+        Fail "expected '${markup}' in '${page}'"
+    fi
+}
+
+# Expects the manual page to contain the given troff markup.
+function ExpectManPageContains()
+{
+    local markup="$1"
+
+    if ! grep -qF -- "${markup}" "${MAN_PAGE}"; then
+        Fail "expected '${markup}' in '${MAN_PAGE}'"
+    fi
+}
+
+# The HTML page sets commands, options and other literal input, which the
+# manual marks in bold, in a monospace font, as the documentation of Git does.
+function TestPagesSetLiteralInputInMonospace()
+{
+    RunJust pages --output="${sandbox}/site"
+    ExpectStatus 0
+    ExpectPageContains '#content strong { font-family: "Droid Sans Mono", "DejaVu Sans Mono", monospace; }'
+}
+
+# The HTML page highlights the shell sessions of the examples, such as their
+# options.
+function TestPagesHighlightExamples()
+{
+    RunJust pages --output="${sandbox}/site"
+    ExpectStatus 0
+    ExpectPageContains '<code data-lang="console">'
+    ExpectPageContains 'git purge-branches <span style="color: #116329">--dry-run</span>'
+}
+
+# The HTML page links back to the project on GitHub from its corner.
+function TestPagesLinkToProject()
+{
+    RunJust pages --output="${sandbox}/site"
+    ExpectStatus 0
+    ExpectPageContains '<a href="https://github.com/sergiud/git-purge-branches" class="github-corner" aria-label="View source on GitHub">'
+    ExpectPageContains 'class="octo-arm"'
+}
+
+# The site serves the install script of the release under a short address.
+function TestPagesServeInstallScript()
+{
+    RunJust pages --output="${sandbox}/site"
+    ExpectStatus 0
+    ExpectExists "${sandbox}/site/install.sh"
+    ExpectSameContents "${sandbox}/site/install.sh" "${ROOT_DIR}/install.sh"
+}
+
+# The HTML page links the commands of Git to their documentation, both in the
+# text and as related commands.
+function TestPagesLinkGitCommandsToGitDocumentation()
+{
+    local docs=https://git-scm.com/docs
+    local command
+
+    RunJust pages --output="${sandbox}/site"
+    ExpectStatus 0
+
+    for command in git-branch git-cherry git-for-each-ref; do
+        ExpectPageContains "<a href=\"${docs}/${command}\"><strong>${command}</strong>(1)</a>"
+    done
+
+    ExpectPageContains "<a href=\"${docs}/git-branch\"><strong>git branch -d</strong></a>"
+    ExpectPageContains "<a href=\"${docs}/git-branch\"><strong>git branch --delete-merged</strong></a>"
+    ExpectPageContains "<a href=\"${docs}/git-cherry\"><strong>git cherry</strong></a>"
+}
+
+# Every section, option and setting of the HTML page has an anchor, and the
+# text links the options, the setting and the sections it mentions to them.
+function TestPagesLinkOptionsAndSections()
+{
+    local anchor
+
+    RunJust pages --output="${sandbox}/site"
+    ExpectStatus 0
+
+    # The manual page doctype renders the section Name as part of the header.
+    for anchor in synopsis description options exit-status configuration examples comparison see-also; do
+        ExpectPageContains "<h2 id=\"${anchor}\"><a class=\"anchor\" href=\"#${anchor}\"></a>"
+    done
+
+    for anchor in option-dry-run option-equivalent option-help argument-commit setting-delete-merged; do
+        ExpectPageContains "<a id=\"${anchor}\"></a>"
+    done
+
+    ExpectPageContains '<a href="#option-dry-run"><strong>--dry-run</strong></a>'
+    ExpectPageContains '<a href="#option-equivalent"><strong>--equivalent</strong></a>'
+    ExpectPageContains '<a href="#setting-delete-merged"><strong>branch.&lt;name&gt;.deleteMerged</strong></a>'
+    ExpectPageContains '<a href="#configuration">CONFIGURATION</a>'
+    ExpectPageContains '<a href="#description">described above</a>'
+}
+
+# The terminal shows the commands, options and sections by name, without
+# addresses.
+function TestManPageNamesReferencesWithoutLinks()
+{
+    RunJust man
+    ExpectStatus 0
+
+    ExpectManPageContains '\fBgit\-branch\fP(1), \fBgit\-cherry\fP(1), \fBgit\-for\-each\-ref\fP(1)'
+    ExpectManPageContains 'with \fBgit branch \-d\fP, which refuses'
+    ExpectManPageContains 'With \fB\-\-equivalent\fP, the list'
+    ExpectManPageContains 'as described under CONFIGURATION.'
+
+    if grep -qE 'git-scm\.com|#(option|setting|configuration|description)' "${MAN_PAGE}"; then
+        Fail "expected no addresses in '${MAN_PAGE}'"
+    fi
 }
 
 # Two builds of the same commit yield the same files, so that anyone can verify
@@ -2022,6 +2142,13 @@ Run TestPacmanHasPackageInfo
 Run TestPacmanInstallsFilesBelowUsr
 Run TestPacmanContainsSources
 Run TestPagesRenderManualPage
+Run TestPagesSetLiteralInputInMonospace
+Run TestPagesHighlightExamples
+Run TestPagesLinkToProject
+Run TestPagesServeInstallScript
+Run TestPagesLinkGitCommandsToGitDocumentation
+Run TestPagesLinkOptionsAndSections
+Run TestManPageNamesReferencesWithoutLinks
 Run TestPackagesAreReproducible
 Run TestGetInstallsLatestRelease
 Run TestGetInstallsGivenVersionBelowPrefix
