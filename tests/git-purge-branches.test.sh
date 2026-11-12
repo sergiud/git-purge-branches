@@ -12,6 +12,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly ROOT_DIR
 readonly SCRIPT="${ROOT_DIR}/git-purge-branches"
 readonly COMPLETION="${ROOT_DIR}/completion/git-purge-branches.bash"
+readonly ZSH_COMPLETION="${ROOT_DIR}/completion/_git-purge-branches"
 # The main script of bash-completion, which loads completions on demand
 BASH_COMPLETION="$(pkg-config --variable=completionsdir bash-completion)/../bash_completion"
 readonly BASH_COMPLETION
@@ -700,6 +701,122 @@ function TestCompletesCommitOfStandaloneCommand()
     ExpectStdout feature
 }
 
+# Completes the given command line in zsh in the test repository, with the
+# completion in a directory in front of fpath, and stores the matches in
+# stdout, one per line in sorted order.
+function CompleteZsh()
+{
+    local completion_dir="${sandbox}/zsh-completion"
+
+    mkdir -p "${completion_dir}"
+    ln -sf "${ZSH_COMPLETION}" "${completion_dir}/_git-purge-branches"
+
+    (cd "${repo}" && timeout "${HANG_TIMEOUT}" \
+        "${ROOT_DIR}/tests/complete.zsh" "${completion_dir}" "$*") \
+        > "${sandbox}/stdout" 2> "${sandbox}/stderr"
+    status=$?
+}
+
+function TestZshCompletesCommand()
+{
+    CompleteZsh git purge-
+    ExpectStatus 0
+    ExpectStdout purge-branches
+}
+
+function TestZshCompletesLongOptions()
+{
+    CompleteZsh git purge-branches --
+    ExpectStatus 0
+    ExpectStdout --dry-run --equivalent --help
+}
+
+function TestZshCompletesShortAndLongOptions()
+{
+    CompleteZsh git purge-branches -
+    ExpectStatus 0
+    ExpectStdout --dry-run --equivalent --help -e -h -n
+}
+
+function TestZshCompletesOptionWithPrefix()
+{
+    CompleteZsh git purge-branches --e
+    ExpectStatus 0
+    ExpectStdout --equivalent
+}
+
+function TestZshOmitsGivenOption()
+{
+    CompleteZsh git purge-branches -n --
+    ExpectStatus 0
+    ExpectStdout --equivalent --help
+}
+
+function TestZshCompletesBranchAsCommit()
+{
+    Git branch topic
+    CompleteZsh git purge-branches to
+    ExpectStatus 0
+    ExpectStdout topic
+}
+
+function TestZshCompletesTagAsCommit()
+{
+    Git tag v1
+    CompleteZsh git purge-branches v
+    ExpectStatus 0
+    ExpectStdout v1
+}
+
+function TestZshCompletesCommitAfterOption()
+{
+    Git branch topic
+    CompleteZsh git purge-branches -n to
+    ExpectStatus 0
+    ExpectStdout topic
+}
+
+function TestZshCompletesCommitAfterDoubleDash()
+{
+    Git branch topic
+    CompleteZsh git purge-branches -- to
+    ExpectStatus 0
+    ExpectStdout topic
+}
+
+# A file of the same prefix shows a fallback to the completion of files.
+function TestZshCompletesNoSecondCommit()
+{
+    Git branch topic
+    touch "${repo}/toolbox"
+    CompleteZsh git purge-branches topic to
+    ExpectStatus 0
+    ExpectStdout ""
+}
+
+function TestZshCompletesNothingAfterHelp()
+{
+    Git branch topic
+    CompleteZsh git purge-branches --help ''
+    ExpectStatus 0
+    ExpectStdout ""
+}
+
+function TestZshCompletesOptionOfStandaloneCommand()
+{
+    CompleteZsh git-purge-branches --e
+    ExpectStatus 0
+    ExpectStdout --equivalent
+}
+
+function TestZshCompletesCommitOfStandaloneCommand()
+{
+    Git branch topic
+    CompleteZsh git-purge-branches to
+    ExpectStatus 0
+    ExpectStdout topic
+}
+
 function Run()
 {
     local name="$1"
@@ -772,6 +889,19 @@ Run TestCompletesCommitAfterDoubleDash
 Run TestCompletesNoOptionAfterDoubleDash
 Run TestCompletesOptionOfStandaloneCommand
 Run TestCompletesCommitOfStandaloneCommand
+Run TestZshCompletesCommand
+Run TestZshCompletesLongOptions
+Run TestZshCompletesShortAndLongOptions
+Run TestZshCompletesOptionWithPrefix
+Run TestZshOmitsGivenOption
+Run TestZshCompletesBranchAsCommit
+Run TestZshCompletesTagAsCommit
+Run TestZshCompletesCommitAfterOption
+Run TestZshCompletesCommitAfterDoubleDash
+Run TestZshCompletesNoSecondCommit
+Run TestZshCompletesNothingAfterHelp
+Run TestZshCompletesOptionOfStandaloneCommand
+Run TestZshCompletesCommitOfStandaloneCommand
 
 echo "${failures} of ${tests} tests failed"
 [[ ${failures} -eq 0 ]]

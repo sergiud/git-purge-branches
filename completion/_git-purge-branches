@@ -1,0 +1,25 @@
+#compdef git-purge-branches
+#description delete local branches merged into a commit
+
+# SPDX-FileCopyrightText: 2026 Sergiu Deitsch
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Zsh completion of git purge-branches and git-purge-branches. The completion
+# of git calls this function by its name for git purge-branches and lists the
+# command with the description above. The helpers of the completion of git,
+# such as __git_commits, exist only while it runs, so for git-purge-branches
+# the line is completed as git purge-branches.
+
+if [[ ${service} == git-purge-branches ]]; then
+    words=(git purge-branches "${(@)words[2,-1]}")
+    (( ++CURRENT ))
+    service=git
+    _git
+else
+    _arguments -S \
+        '(-n --dry-run)'{-n,--dry-run}'[list the branches that would be deleted instead]' \
+        '(-e --equivalent)'{-e,--equivalent}'[also delete branches whose commits all have an equivalent in the commit]' \
+        '(- :)'{-h,--help}'[show the help]' \
+        ':commit:__git_commits'
+fi

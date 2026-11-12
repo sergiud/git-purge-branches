@@ -40,6 +40,13 @@ $ mkdir -p ~/.local/share/bash-completion/completions
 $ ln -s "$PWD/completion/git-purge-branches.bash" ~/.local/share/bash-completion/completions/
 ```
 
+For zsh, add the `completion` directory to `fpath` in `~/.zshrc` before
+`compinit` runs:
+
+```zsh
+fpath=(~/path/to/git-purge-branches/completion $fpath)
+```
+
 Run the tests with `just test`.
 
 ## License
