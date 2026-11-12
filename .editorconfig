@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: 2026 Sergiu Deitsch
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+root = true
+
+# The format of the shell scripts, which shfmt reads
+[{*.sh,*.bash,git-purge-branches}]
+indent_style = space
+indent_size = 4
+switch_case_indent = true
+function_next_line = true

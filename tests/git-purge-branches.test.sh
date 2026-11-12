@@ -74,7 +74,7 @@ function RunPurgeIn()
     shift
 
     (cd "${directory}" && timeout "${HANG_TIMEOUT}" /bin/bash "${SCRIPT}" "$@") \
-        > "${sandbox}/stdout" 2> "${sandbox}/stderr"
+        >"${sandbox}/stdout" 2>"${sandbox}/stderr"
     status=$?
 }
 
@@ -98,7 +98,7 @@ function CommitFile()
 {
     local name="$1"
 
-    echo "${name}" > "${repo}/${name}"
+    echo "${name}" >"${repo}/${name}"
     Git add "${name}"
     Git commit -q -m "${name}"
 }
@@ -115,7 +115,7 @@ function CreateRebasedBranch()
     CommitFile "${name}"
     Git switch -q "${target}"
     CommitFile "${target}-${name}"
-    Git cherry-pick "${name}" > /dev/null
+    Git cherry-pick "${name}" >/dev/null
     Git switch -q master
 }
 
@@ -130,8 +130,7 @@ function Fail()
 # tool cannot silently disable it.
 function Skip()
 {
-    if [[ -n ${REQUIRE_ALL_TESTS:-} ]]
-    then
+    if [[ -n ${REQUIRE_ALL_TESTS:-} ]]; then
         Fail "$*"
     else
         echo "    $*"
@@ -144,10 +143,8 @@ function RequireCommands()
 {
     local command
 
-    for command in "$@"
-    do
-        if ! command -v "${command}" > /dev/null
-        then
+    for command in "$@"; do
+        if ! command -v "${command}" >/dev/null; then
             Skip "skipped since ${command} is missing"
             return 1
         fi
@@ -158,9 +155,8 @@ function ExpectStatus()
 {
     local expected="$1"
 
-    if [[ ${status} -ne ${expected} ]]
-    then
-        Fail "expected exit status ${expected}, got ${status}, stderr: '$(< "${sandbox}/stderr")'"
+    if [[ ${status} -ne ${expected} ]]; then
+        Fail "expected exit status ${expected}, got ${status}, stderr: '$(<"${sandbox}/stderr")'"
     fi
 }
 
@@ -171,8 +167,7 @@ function ExpectBranches()
     actual="$(Git for-each-ref --format='%(refname:lstrip=2)' refs/heads/)"
     actual="${actual//$'\n'/ }"
 
-    if [[ ${actual} != "${expected}" ]]
-    then
+    if [[ ${actual} != "${expected}" ]]; then
         Fail "expected branches '${expected}', got '${actual}'"
     fi
 }
@@ -181,11 +176,10 @@ function ExpectStdout()
 {
     local expected="$*"
     local actual
-    actual="$(< "${sandbox}/stdout")"
+    actual="$(<"${sandbox}/stdout")"
     actual="${actual//$'\n'/ }"
 
-    if [[ ${actual} != "${expected}" ]]
-    then
+    if [[ ${actual} != "${expected}" ]]; then
         Fail "expected stdout '${expected}', got '${actual}'"
     fi
 }
@@ -194,9 +188,8 @@ function ExpectStderrContains()
 {
     local expected="$1"
 
-    if ! grep -qF -- "${expected}" "${sandbox}/stderr"
-    then
-        Fail "expected stderr to contain '${expected}', got '$(< "${sandbox}/stderr")'"
+    if ! grep -qF -- "${expected}" "${sandbox}/stderr"; then
+        Fail "expected stderr to contain '${expected}', got '$(<"${sandbox}/stderr")'"
     fi
 }
 
@@ -388,11 +381,11 @@ function TestKeepsBranchWithChangingMergeWithEquivalent()
     Git switch -q side
     CommitFile side
     Git switch -q feature
-    Git merge -q --no-commit side > /dev/null 2>&1
+    Git merge -q --no-commit side >/dev/null 2>&1
     CommitFile resolution
     Git switch -q master
     CommitFile master-feature
-    Git cherry-pick side feature^ > /dev/null
+    Git cherry-pick side feature^ >/dev/null
     Git branch -D -q side
     RunPurge --equivalent
     ExpectStatus 0
@@ -502,9 +495,8 @@ function TestHelpPrintsUsage()
     ExpectStatus 0
     ExpectBranches feature master
 
-    if ! grep -qF -- '--equivalent' "${sandbox}/stdout"
-    then
-        Fail "expected usage with --equivalent on stdout, got '$(< "${sandbox}/stdout")'"
+    if ! grep -qF -- '--equivalent' "${sandbox}/stdout"; then
+        Fail "expected usage with --equivalent on stdout, got '$(<"${sandbox}/stdout")'"
     fi
 }
 
@@ -641,7 +633,7 @@ function FakeUserId()
     local uid="$1"
 
     mkdir -p "${sandbox}/fake-bin"
-    printf '#!/bin/sh\necho %s\n' "${uid}" > "${sandbox}/fake-bin/id"
+    printf '#!/bin/sh\necho %s\n' "${uid}" >"${sandbox}/fake-bin/id"
     chmod +x "${sandbox}/fake-bin/id"
 }
 
@@ -655,7 +647,7 @@ function RunJustIn()
 
     (HOME="${sandbox}/home" PATH="${sandbox}/fake-bin:${PATH}" \
         timeout "${HANG_TIMEOUT}" just --justfile "${directory}/justfile" "$@") \
-        > "${sandbox}/stdout" 2> "${sandbox}/stderr"
+        >"${sandbox}/stdout" 2>"${sandbox}/stderr"
     status=$?
 }
 
@@ -667,7 +659,7 @@ function RunJust()
 function RunInstallScript()
 {
     timeout "${HANG_TIMEOUT}" "${ROOT_DIR}/scripts/install.sh" "$@" \
-        > "${sandbox}/stdout" 2> "${sandbox}/stderr"
+        >"${sandbox}/stdout" 2>"${sandbox}/stderr"
     status=$?
 }
 
@@ -678,21 +670,18 @@ function ExpectInstalledFile()
     local source="$3"
     local actual_mode
 
-    if [[ ! -f ${path} ]]
-    then
+    if [[ ! -f ${path} ]]; then
         Fail "expected installed file '${path}'"
         return
     fi
 
     actual_mode="$(stat --format=%a "${path}")"
 
-    if [[ ${actual_mode} != "${mode}" ]]
-    then
+    if [[ ${actual_mode} != "${mode}" ]]; then
         Fail "expected mode ${mode} of '${path}', got ${actual_mode}"
     fi
 
-    if ! cmp --quiet "${path}" "${source}"
-    then
+    if ! cmp --quiet "${path}" "${source}"; then
         Fail "expected '${path}' to equal '${source}'"
     fi
 }
@@ -701,8 +690,7 @@ function ExpectExists()
 {
     local path="$1"
 
-    if [[ ! -e ${path} ]]
-    then
+    if [[ ! -e ${path} ]]; then
         Fail "expected '${path}' to exist"
     fi
 }
@@ -711,8 +699,7 @@ function ExpectNotInstalled()
 {
     local path="$1"
 
-    if [[ -e ${path} ]]
-    then
+    if [[ -e ${path} ]]; then
         Fail "expected no file '${path}'"
     fi
 }
@@ -868,8 +855,7 @@ function TestUninstallKeepsOtherFiles()
     ExpectStatus 0
     ExpectNothingInstalled "${sandbox}/prefix"
 
-    if [[ ! -f ${other_completion} ]]
-    then
+    if [[ ! -f ${other_completion} ]]; then
         Fail "expected '${other_completion}' to remain"
     fi
 }
@@ -961,8 +947,7 @@ function ExpectLines()
     local actual="$1"
     local expected="$2"
 
-    if [[ ${actual} != "${expected}" ]]
-    then
+    if [[ ${actual} != "${expected}" ]]; then
         Fail "expected"$'\n'"${expected}"$'\n'"    got"$'\n'"${actual}"
     fi
 }
@@ -975,7 +960,7 @@ function ExpectArchiveFiles()
     local expected="$2"
     local actual
 
-    awk '$1 !~ /^d/ { print $1, $2, $6 }' "${listing}" > "${sandbox}/files"
+    awk '$1 !~ /^d/ { print $1, $2, $6 }' "${listing}" >"${sandbox}/files"
     actual="$(LC_ALL=C sort -k 3 "${sandbox}/files")"
     ExpectLines "${actual}" "${expected}"
 }
@@ -985,8 +970,7 @@ function ExpectSameContents()
     local actual="$1"
     local expected="$2"
 
-    if ! cmp --quiet "${actual}" "${expected}"
-    then
+    if ! cmp --quiet "${actual}" "${expected}"; then
         Fail "expected '${actual}' to equal '${expected}'"
     fi
 }
@@ -1013,7 +997,7 @@ function TestDebInstallsFilesBelowUsr()
 
     RunJust deb --version="${PACKAGE_VERSION}" --output="${sandbox}/dist"
     ExpectStatus 0
-    dpkg-deb --contents "${sandbox}/dist/${DEB}" > "${sandbox}/listing"
+    dpkg-deb --contents "${sandbox}/dist/${DEB}" >"${sandbox}/listing"
     ExpectArchiveFiles "${sandbox}/listing" "${DEB_FILES}"
 }
 
@@ -1023,14 +1007,16 @@ function TestDebHasModesUnderRestrictiveUmask()
 {
     RequireCommands dpkg-buildpackage dh || return
 
-    (umask 077 && RunJust deb --version="${PACKAGE_VERSION}" --output="${sandbox}/dist"
-        echo "${status}" > "${sandbox}/status")
-    status="$(< "${sandbox}/status")"
+    (
+        umask 077 && RunJust deb --version="${PACKAGE_VERSION}" --output="${sandbox}/dist"
+        echo "${status}" >"${sandbox}/status"
+    )
+    status="$(<"${sandbox}/status")"
     ExpectStatus 0
-    dpkg-deb --contents "${sandbox}/dist/${DEB}" > "${sandbox}/listing"
+    dpkg-deb --contents "${sandbox}/dist/${DEB}" >"${sandbox}/listing"
     ExpectArchiveFiles "${sandbox}/listing" "${DEB_FILES}"
-    dpkg-deb --ctrl-tarfile "${sandbox}/dist/${DEB}" > "${sandbox}/control.tar"
-    tar --list --verbose --file="${sandbox}/control.tar" > "${sandbox}/listing"
+    dpkg-deb --ctrl-tarfile "${sandbox}/dist/${DEB}" >"${sandbox}/control.tar"
+    tar --list --verbose --file="${sandbox}/control.tar" >"${sandbox}/listing"
     ExpectArchiveFiles "${sandbox}/listing" "-rw-r--r-- root/root ./control
 -rw-r--r-- root/root ./md5sums"
 }
@@ -1047,7 +1033,7 @@ function TestDebHasChangelogOfRelease()
     ExpectStatus 0
     dpkg-deb --extract "${sandbox}/dist/${DEB}" "${root}"
     gzip --decompress --stdout "${root}/usr/share/doc/git-purge-branches/changelog.gz" \
-        > "${sandbox}/changelog"
+        >"${sandbox}/changelog"
     # The date of the signature is that of the last commit.
     changelog="$(sed 's/^\( -- .*>\)  .*$/\1/' "${sandbox}/changelog")"
     ExpectLines "${changelog}" "git-purge-branches (${PACKAGE_VERSION}) unstable; urgency=medium
@@ -1081,9 +1067,9 @@ function TestTarballHasInstallLayout()
 
     RunJust tarball --version="${PACKAGE_VERSION}" --output="${sandbox}/dist"
     ExpectStatus 0
-    tar --list --verbose --gzip --file="${sandbox}/dist/${TARBALL}" > "${sandbox}/listing"
+    tar --list --verbose --gzip --file="${sandbox}/dist/${TARBALL}" >"${sandbox}/listing"
     ExpectArchiveFiles "${sandbox}/listing" \
-"-rwxr-xr-x root/root ${top}/${INSTALLED_SCRIPT}
+        "-rwxr-xr-x root/root ${top}/${INSTALLED_SCRIPT}
 -rw-r--r-- root/root ${top}/${INSTALLED_COMPLETION}
 -rw-r--r-- root/root ${top}/share/doc/git-purge-branches/GPL-3.0-or-later.txt
 -rw-r--r-- root/root ${top}/${INSTALLED_FISH_COMPLETION}
@@ -1128,7 +1114,7 @@ function TestPackagesRejectVersionWithHyphen()
 function TestPackageScriptRejectsUnknownFormat()
 {
     timeout "${HANG_TIMEOUT}" "${ROOT_DIR}/scripts/package.sh" --version="${PACKAGE_VERSION}" \
-        --output="${sandbox}/dist" deb rpm > "${sandbox}/stdout" 2> "${sandbox}/stderr"
+        --output="${sandbox}/dist" deb rpm >"${sandbox}/stdout" 2>"${sandbox}/stderr"
     status=$?
     ExpectStatus "${USAGE_ERROR}"
     ExpectStderrContains "error: unknown format 'rpm'"
@@ -1143,8 +1129,7 @@ function RequireMakepkg()
 {
     RequireCommands makepkg || return
 
-    if ((EUID == 0))
-    then
+    if ((EUID == 0)); then
         Skip "skipped since makepkg refuses to run as root"
         return 1
     fi
@@ -1157,7 +1142,7 @@ function CreateCheckoutRepository()
 {
     local checkout="${sandbox}/checkout"
 
-    git -C "${ROOT_DIR}" ls-files -z --cached --others --exclude-standard > "${sandbox}/files"
+    git -C "${ROOT_DIR}" ls-files -z --cached --others --exclude-standard >"${sandbox}/files"
     tar --create --file="${sandbox}/checkout.tar" --directory="${ROOT_DIR}" --null \
         --files-from="${sandbox}/files"
     mkdir "${checkout}"
@@ -1184,7 +1169,7 @@ function RunVersionIn()
     shift
 
     timeout "${HANG_TIMEOUT}" "${directory}/scripts/version.sh" "$@" \
-        > "${sandbox}/stdout" 2> "${sandbox}/stderr"
+        >"${sandbox}/stdout" 2>"${sandbox}/stderr"
     status=$?
 }
 
@@ -1268,7 +1253,7 @@ function RunMakepkgIn()
 
     (cd "${directory}" && PKGDEST="${sandbox}/packages" BUILDDIR="${sandbox}/build" \
         SRCDEST="${sandbox}/sources" timeout "${HANG_TIMEOUT}" makepkg --nodeps -D pacman) \
-        > "${sandbox}/stdout" 2> "${sandbox}/stderr"
+        >"${sandbox}/stdout" 2>"${sandbox}/stderr"
     status=$?
 }
 
@@ -1332,7 +1317,7 @@ function TestPacmanHasPackageInfo()
     date="$(git -C "${ROOT_DIR}" log -1 --format=%ct)"
     RunJust pacman --version="${PACKAGE_VERSION}" --output="${sandbox}/dist"
     ExpectStatus 0
-    tar --extract --to-stdout --file="${sandbox}/dist/${PACMAN}" .PKGINFO > "${sandbox}/info"
+    tar --extract --to-stdout --file="${sandbox}/dist/${PACMAN}" .PKGINFO >"${sandbox}/info"
     fields="$(grep -E '^(pkgname|pkgver|builddate|packager|arch|depend) = ' "${sandbox}/info")"
     ExpectLines "${fields}" "pkgname = git-purge-branches
 pkgver = ${PACKAGE_VERSION}-1
@@ -1350,11 +1335,11 @@ function TestPacmanInstallsFilesBelowUsr()
 
     RunJust pacman --version="${PACKAGE_VERSION}" --output="${sandbox}/dist"
     ExpectStatus 0
-    tar --list --verbose --file="${sandbox}/dist/${PACMAN}" > "${sandbox}/listing"
+    tar --list --verbose --file="${sandbox}/dist/${PACMAN}" >"${sandbox}/listing"
     # The metadata of pacman, such as .PKGINFO, is no installed file.
     sed --in-place '/ \.[A-Z]*$/d' "${sandbox}/listing"
     ExpectArchiveFiles "${sandbox}/listing" \
-"-rwxr-xr-x root/root usr/bin/git-purge-branches
+        "-rwxr-xr-x root/root usr/bin/git-purge-branches
 -rw-r--r-- root/root usr/share/bash-completion/completions/git-purge-branches
 -rw-r--r-- root/root usr/share/fish/vendor_completions.d/git-purge-branches.fish
 -rw-r--r-- root/root usr/share/man/man1/git-purge-branches.1.gz
@@ -1423,7 +1408,7 @@ function Complete()
             "${function}" "$1" "${COMP_WORDS[COMP_CWORD]}" "${COMP_WORDS[COMP_CWORD - 1]}"
             printf "%s\n" "${COMPREPLY[@]%" "}"
         ' completion "${BASH_COMPLETION}" "$@") \
-        > "${sandbox}/stdout" 2> "${sandbox}/stderr"
+        >"${sandbox}/stdout" 2>"${sandbox}/stderr"
     status=$?
 }
 
@@ -1516,7 +1501,7 @@ function CompleteZsh()
 
     (cd "${repo}" && PATH="${ROOT_DIR}:${PATH}" timeout "${HANG_TIMEOUT}" \
         "${ROOT_DIR}/tests/complete.zsh" "${completion_dir}" "$*") \
-        > "${sandbox}/stdout" 2> "${sandbox}/stderr"
+        >"${sandbox}/stdout" 2>"${sandbox}/stderr"
     status=$?
 }
 
@@ -1638,7 +1623,7 @@ function CompleteFish()
             set --prepend fish_complete_path $argv[1]
             complete --do-complete $argv[2]
         ' "${completion_dir}" "$*") \
-        > "${sandbox}/completions" 2> "${sandbox}/stderr"
+        >"${sandbox}/completions" 2>"${sandbox}/stderr"
     status=$?
 
     local word="${*: -1}"
@@ -1646,7 +1631,7 @@ function CompleteFish()
     local completion
     local match
 
-    readarray -t completions < "${sandbox}/completions"
+    readarray -t completions <"${sandbox}/completions"
 
     # Each completion is a match and a description separated by a tab. Some
     # releases of fish, such as 4.2, also list matches that contain the word
@@ -1658,7 +1643,7 @@ function CompleteFish()
         if [[ ${match} == "${word}"* ]]; then
             echo "${match}"
         fi
-    done > "${sandbox}/matches"
+    done >"${sandbox}/matches"
 
     LC_ALL=C sort --output="${sandbox}/stdout" "${sandbox}/matches"
 }
@@ -1763,12 +1748,10 @@ function Run()
     "${name}"
     TearDown
 
-    if [[ ${test_failed} -ne 0 ]]
-    then
+    if [[ ${test_failed} -ne 0 ]]; then
         echo "FAIL ${name}"
         ((++failures))
-    elif [[ ${test_skipped} -ne 0 ]]
-    then
+    elif [[ ${test_skipped} -ne 0 ]]; then
         echo "SKIP ${name}"
         ((++skipped))
     else

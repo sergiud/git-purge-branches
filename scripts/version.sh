@@ -30,7 +30,7 @@ date="$(sed -n 's/^date=//p' "${root_dir}/scripts/source-info")"
 if [[ ${date} == "\$Format:"* ]]; then
     date="$(git -C "${root_dir}" log -1 --format=%ct)"
 
-    if ! describe="$(git -C "${root_dir}" describe --tags 2> /dev/null)"; then
+    if ! describe="$(git -C "${root_dir}" describe --tags 2>/dev/null)"; then
         count="$(git -C "${root_dir}" rev-list --count HEAD)"
         hash="$(git -C "${root_dir}" rev-parse --short HEAD)"
         describe="0-${count}-g${hash}"

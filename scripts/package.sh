@@ -141,7 +141,7 @@ function RunLogged()
     local directory="$1"
     shift
 
-    (cd "${directory}" && "$@") > "${staging}/build.log" 2>&1 || {
+    (cd "${directory}" && "$@") >"${staging}/build.log" 2>&1 || {
         cat "${staging}/build.log" >&2
         return 1
     }
@@ -169,7 +169,7 @@ function BuildDeb()
 
     CopySources "${source}"
     date="$(date --utc --rfc-email --date="@${SOURCE_DATE_EPOCH}")"
-    cat > "${source}/debian/changelog" <<CHANGELOG
+    cat >"${source}/debian/changelog" <<CHANGELOG
 ${name} (${version}) unstable; urgency=medium
 
   * Release ${version}.

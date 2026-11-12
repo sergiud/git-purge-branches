@@ -25,7 +25,7 @@ _git_purge_branches()
 # The command git-purge-branches needs the functions of the completion of git,
 # which bash-completion loads on demand as well. The completion of git is
 # already loaded when it loads this file for git purge-branches.
-if ! declare -F __git_complete > /dev/null; then
+if ! declare -F __git_complete >/dev/null; then
     _completion_loader git
 fi
 
