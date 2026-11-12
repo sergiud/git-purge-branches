@@ -30,8 +30,13 @@ tests:
     - apt-get update
     - >-
       apt-get install --yes --no-install-recommends git pipx
-      bash-completion zsh fish asciidoctor groff-base pkgconf
+      bash-completion zsh fish asciidoctor groff-base pkgconf debhelper
+      makepkg pacman-package-manager libarchive-tools zstd
     # The recipes take options, which just supports from 1.46, a release newer
     # than that of Ubuntu.
     - pipx install --global rust-just==1.59.0
-    - just test
+    # makepkg refuses to run as root, which the image is. A test that lacks a
+    # tool fails instead of being skipped.
+    - useradd --create-home tester
+    - chown -R tester: .
+    - su tester -c 'REQUIRE_ALL_TESTS=1 just test'

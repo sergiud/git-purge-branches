@@ -1,0 +1,38 @@
+# SPDX-FileCopyrightText: 2026 Sergiu Deitsch
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Maintainer: Sergiu Deitsch <sergiu.deitsch@gmail.com>
+
+# Packages the sources that contain this directory, a checkout or an archive of
+# one, such as with makepkg -D pacman.
+pkgname=git-purge-branches
+pkgver=0
+pkgrel=1
+pkgdesc='Delete local branches merged into a commit'
+arch=(any)
+license=(GPL-3.0-or-later)
+depends=(bash 'git>=2.41')
+makedepends=(asciidoctor groff)
+# The package holds scripts only, which leaves nothing to strip.
+options=(!strip)
+
+# The version of the sources, unless scripts/package.sh passes the version of a
+# release
+pkgver() {
+	if [[ -n ${GIT_PURGE_BRANCHES_VERSION:-} ]]; then
+		printf '%s\n' "${GIT_PURGE_BRANCHES_VERSION}"
+	else
+		"${startdir}/../scripts/version.sh" version
+	fi
+}
+
+build() {
+	cd "${startdir}/.."
+	./scripts/build-man-pages.sh
+}
+
+package() {
+	cd "${startdir}/.."
+	DESTDIR="${pkgdir}" ./scripts/install.sh --prefix=/usr script man bash zsh fish
+}

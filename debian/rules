@@ -1,0 +1,21 @@
+#!/usr/bin/make -f
+
+# SPDX-FileCopyrightText: 2026 Sergiu Deitsch
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+package := debian/git-purge-branches
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	./scripts/build-man-pages.sh
+
+# The zsh of Debian looks for the completions of packages in vendor-completions,
+# not in site-functions.
+override_dh_auto_install:
+	DESTDIR=$(package) ./scripts/install.sh --prefix=/usr script man bash zsh fish
+	mkdir -p $(package)/usr/share/zsh/vendor-completions
+	mv $(package)/usr/share/zsh/site-functions/_git-purge-branches $(package)/usr/share/zsh/vendor-completions/
+	rmdir $(package)/usr/share/zsh/site-functions

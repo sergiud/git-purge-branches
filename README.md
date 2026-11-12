@@ -51,6 +51,35 @@ fpath=(~/.local/share/zsh/site-functions $fpath)
 
 Run the tests with `just test`.
 
+## Packages
+
+`just deb`, `just pacman` and `just tarball` build packages of a release into
+`dist/`:
+
+| Recipe | Package | Needs |
+| --- | --- | --- |
+| `just deb` | `git-purge-branches_1.2.3_all.deb` | `dpkg-buildpackage`, debhelper |
+| `just pacman` | `git-purge-branches-1.2.3-1-any.pkg.tar.zst` | `makepkg` |
+| `just tarball` | `git-purge-branches-1.2.3.tar.gz` | |
+
+The version is that of the sources: the tag of the commit without a leading
+`v`, such as 1.2.3, a tag followed by `.r<count>.<hash>` for later commits, or
+`0.r<count>.<hash>` without a tag. An archive of a tagged commit, such as the
+source code that GitHub offers for a release, carries its version without git.
+`--version=1.2.3` sets another one.
+
+The top-level directory of the tarball holds the install layout:
+
+```console
+$ tar -xzf git-purge-branches-1.2.3.tar.gz --strip-components=1 -C ~/.local
+```
+
+On Arch Linux, `makepkg -D pacman` in the sources builds the package as well,
+and records the version in `pacman/PKGBUILD`.
+
+Publishing a release on GitHub attaches the three packages to the release, with
+the version taken from its tag.
+
 ## License
 
 GPL-3.0-or-later, see [`LICENSES`](LICENSES/GPL-3.0-or-later.txt).

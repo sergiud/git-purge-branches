@@ -35,6 +35,7 @@ readonly USAGE_ERROR=2
 readonly HANG_TIMEOUT=60
 
 failures=0
+skipped=0
 tests=0
 
 function Git()
@@ -122,6 +123,35 @@ function Fail()
 {
     echo "    $*"
     test_failed=1
+}
+
+# Marks the running test as skipped for the given reason. With
+# REQUIRE_ALL_TESTS set, as in CI, the test fails instead, so that a missing
+# tool cannot silently disable it.
+function Skip()
+{
+    if [[ -n ${REQUIRE_ALL_TESTS:-} ]]
+    then
+        Fail "$*"
+    else
+        echo "    $*"
+        test_skipped=1
+    fi
+}
+
+# Skips the running test and returns 1 unless all the given commands exist.
+function RequireCommands()
+{
+    local command
+
+    for command in "$@"
+    do
+        if ! command -v "${command}" > /dev/null
+        then
+            Skip "skipped since ${command} is missing"
+            return 1
+        fi
+    done
 }
 
 function ExpectStatus()
@@ -618,12 +648,20 @@ function FakeUserId()
 # Runs the given recipe of the justfile with its arguments and stores its exit
 # status. The home directory is in the sandbox, so that the default prefix of a
 # user never points to the real one.
-function RunJust()
+function RunJustIn()
 {
+    local directory="$1"
+    shift
+
     (HOME="${sandbox}/home" PATH="${sandbox}/fake-bin:${PATH}" \
-        timeout "${HANG_TIMEOUT}" just --justfile "${ROOT_DIR}/justfile" "$@") \
+        timeout "${HANG_TIMEOUT}" just --justfile "${directory}/justfile" "$@") \
         > "${sandbox}/stdout" 2> "${sandbox}/stderr"
     status=$?
+}
+
+function RunJust()
+{
+    RunJustIn "${ROOT_DIR}" "$@"
 }
 
 function RunInstallScript()
@@ -656,6 +694,16 @@ function ExpectInstalledFile()
     if ! cmp --quiet "${path}" "${source}"
     then
         Fail "expected '${path}' to equal '${source}'"
+    fi
+}
+
+function ExpectExists()
+{
+    local path="$1"
+
+    if [[ ! -e ${path} ]]
+    then
+        Fail "expected '${path}' to exist"
     fi
 }
 
@@ -892,6 +940,461 @@ function TestUninstallFishCompletionRemovesOnlyIt()
     ExpectNotInstalled "${sandbox}/prefix/${INSTALLED_FISH_COMPLETION}"
     ExpectInstalledFile "${sandbox}/prefix/${INSTALLED_COMPLETION}" 644 "${COMPLETION}"
     ExpectInstalledFile "${sandbox}/prefix/${INSTALLED_ZSH_COMPLETION}" 644 "${ZSH_COMPLETION}"
+}
+
+readonly PACKAGE_VERSION=1.2.3
+readonly DEB="git-purge-branches_${PACKAGE_VERSION}_all.deb"
+readonly TARBALL="git-purge-branches-${PACKAGE_VERSION}.tar.gz"
+# The modes, owners and paths of the files of the Debian package. Debian
+# searches zsh completions of packages in vendor-completions, and its policy
+# requires compressed manual pages and a copyright file.
+readonly DEB_FILES="-rwxr-xr-x root/root ./usr/bin/git-purge-branches
+-rw-r--r-- root/root ./usr/share/bash-completion/completions/git-purge-branches
+-rw-r--r-- root/root ./usr/share/doc/git-purge-branches/changelog.gz
+-rw-r--r-- root/root ./usr/share/doc/git-purge-branches/copyright
+-rw-r--r-- root/root ./usr/share/fish/vendor_completions.d/git-purge-branches.fish
+-rw-r--r-- root/root ./usr/share/man/man1/git-purge-branches.1.gz
+-rw-r--r-- root/root ./usr/share/zsh/vendor-completions/_git-purge-branches"
+
+function ExpectLines()
+{
+    local actual="$1"
+    local expected="$2"
+
+    if [[ ${actual} != "${expected}" ]]
+    then
+        Fail "expected"$'\n'"${expected}"$'\n'"    got"$'\n'"${actual}"
+    fi
+}
+
+# Compares the files of a verbose listing of dpkg-deb or tar in the given file,
+# as lines of their mode, owner and path sorted by path, with the expected ones.
+function ExpectArchiveFiles()
+{
+    local listing="$1"
+    local expected="$2"
+    local actual
+
+    awk '$1 !~ /^d/ { print $1, $2, $6 }' "${listing}" > "${sandbox}/files"
+    actual="$(LC_ALL=C sort -k 3 "${sandbox}/files")"
+    ExpectLines "${actual}" "${expected}"
+}
+
+function ExpectSameContents()
+{
+    local actual="$1"
+    local expected="$2"
+
+    if ! cmp --quiet "${actual}" "${expected}"
+    then
+        Fail "expected '${actual}' to equal '${expected}'"
+    fi
+}
+
+function TestDebHasControlFields()
+{
+    local fields
+
+    RequireCommands dpkg-buildpackage dh || return
+
+    RunJust deb --version="${PACKAGE_VERSION}" --output="${sandbox}/dist"
+    ExpectStatus 0
+    fields="$(dpkg-deb --field "${sandbox}/dist/${DEB}" Package Version Architecture Maintainer Depends)"
+    ExpectLines "${fields}" "Package: git-purge-branches
+Version: ${PACKAGE_VERSION}
+Architecture: all
+Maintainer: Sergiu Deitsch <sergiu.deitsch@gmail.com>
+Depends: git (>= 1:2.41)"
+}
+
+function TestDebInstallsFilesBelowUsr()
+{
+    RequireCommands dpkg-buildpackage dh || return
+
+    RunJust deb --version="${PACKAGE_VERSION}" --output="${sandbox}/dist"
+    ExpectStatus 0
+    dpkg-deb --contents "${sandbox}/dist/${DEB}" > "${sandbox}/listing"
+    ExpectArchiveFiles "${sandbox}/listing" "${DEB_FILES}"
+}
+
+# Files that the build writes instead of installing get the modes of the
+# others even if the umask removes the permissions of the group and others.
+function TestDebHasModesUnderRestrictiveUmask()
+{
+    RequireCommands dpkg-buildpackage dh || return
+
+    (umask 077 && RunJust deb --version="${PACKAGE_VERSION}" --output="${sandbox}/dist"
+        echo "${status}" > "${sandbox}/status")
+    status="$(< "${sandbox}/status")"
+    ExpectStatus 0
+    dpkg-deb --contents "${sandbox}/dist/${DEB}" > "${sandbox}/listing"
+    ExpectArchiveFiles "${sandbox}/listing" "${DEB_FILES}"
+    dpkg-deb --ctrl-tarfile "${sandbox}/dist/${DEB}" > "${sandbox}/control.tar"
+    tar --list --verbose --file="${sandbox}/control.tar" > "${sandbox}/listing"
+    ExpectArchiveFiles "${sandbox}/listing" "-rw-r--r-- root/root ./control
+-rw-r--r-- root/root ./md5sums"
+}
+
+# The changelog names the release, and the maintainer signs it.
+function TestDebHasChangelogOfRelease()
+{
+    local root="${sandbox}/root"
+    local changelog
+
+    RequireCommands dpkg-buildpackage dh || return
+
+    RunJust deb --version="${PACKAGE_VERSION}" --output="${sandbox}/dist"
+    ExpectStatus 0
+    dpkg-deb --extract "${sandbox}/dist/${DEB}" "${root}"
+    gzip --decompress --stdout "${root}/usr/share/doc/git-purge-branches/changelog.gz" \
+        > "${sandbox}/changelog"
+    # The date of the signature is that of the last commit.
+    changelog="$(sed 's/^\( -- .*>\)  .*$/\1/' "${sandbox}/changelog")"
+    ExpectLines "${changelog}" "git-purge-branches (${PACKAGE_VERSION}) unstable; urgency=medium
+
+  * Release ${PACKAGE_VERSION}.
+
+ -- Sergiu Deitsch <sergiu.deitsch@gmail.com>"
+}
+
+function TestDebContainsSources()
+{
+    local root="${sandbox}/root"
+
+    RequireCommands dpkg-buildpackage dh || return
+
+    RunJust deb --version="${PACKAGE_VERSION}" --output="${sandbox}/dist"
+    ExpectStatus 0
+    dpkg-deb --extract "${sandbox}/dist/${DEB}" "${root}"
+    gzip --decompress --keep "${root}/usr/share/man/man1/git-purge-branches.1.gz"
+
+    ExpectSameContents "${root}/usr/bin/git-purge-branches" "${SCRIPT}"
+    ExpectSameContents "${root}/usr/share/man/man1/git-purge-branches.1" "${MAN_PAGE}"
+    ExpectSameContents "${root}/usr/share/bash-completion/completions/git-purge-branches" "${COMPLETION}"
+    ExpectSameContents "${root}/usr/share/zsh/vendor-completions/_git-purge-branches" "${ZSH_COMPLETION}"
+    ExpectSameContents "${root}/usr/share/fish/vendor_completions.d/git-purge-branches.fish" "${FISH_COMPLETION}"
+}
+
+function TestTarballHasInstallLayout()
+{
+    local top="git-purge-branches-${PACKAGE_VERSION}"
+
+    RunJust tarball --version="${PACKAGE_VERSION}" --output="${sandbox}/dist"
+    ExpectStatus 0
+    tar --list --verbose --gzip --file="${sandbox}/dist/${TARBALL}" > "${sandbox}/listing"
+    ExpectArchiveFiles "${sandbox}/listing" \
+"-rwxr-xr-x root/root ${top}/${INSTALLED_SCRIPT}
+-rw-r--r-- root/root ${top}/${INSTALLED_COMPLETION}
+-rw-r--r-- root/root ${top}/share/doc/git-purge-branches/GPL-3.0-or-later.txt
+-rw-r--r-- root/root ${top}/${INSTALLED_FISH_COMPLETION}
+-rw-r--r-- root/root ${top}/${INSTALLED_MAN_PAGE}
+-rw-r--r-- root/root ${top}/${INSTALLED_ZSH_COMPLETION}"
+}
+
+function TestTarballContainsSources()
+{
+    local top="${sandbox}/git-purge-branches-${PACKAGE_VERSION}"
+
+    RunJust tarball --version="${PACKAGE_VERSION}" --output="${sandbox}/dist"
+    ExpectStatus 0
+    tar --extract --gzip --file="${sandbox}/dist/${TARBALL}" --directory="${sandbox}"
+
+    ExpectSameContents "${top}/${INSTALLED_SCRIPT}" "${SCRIPT}"
+    ExpectSameContents "${top}/${INSTALLED_MAN_PAGE}" "${MAN_PAGE}"
+    ExpectSameContents "${top}/${INSTALLED_COMPLETION}" "${COMPLETION}"
+    ExpectSameContents "${top}/${INSTALLED_ZSH_COMPLETION}" "${ZSH_COMPLETION}"
+    ExpectSameContents "${top}/${INSTALLED_FISH_COMPLETION}" "${FISH_COMPLETION}"
+    ExpectSameContents "${top}/share/doc/git-purge-branches/GPL-3.0-or-later.txt" \
+        "${ROOT_DIR}/LICENSES/GPL-3.0-or-later.txt"
+}
+
+# Release tags such as v1.2.3 carry a prefix that Debian versions lack.
+function TestPackagesRejectVersionWithoutLeadingDigit()
+{
+    RunJust deb --version=v1.2.3 --output="${sandbox}/dist"
+    ExpectStatus "${USAGE_ERROR}"
+    ExpectStderrContains "error: expected a version that starts with a digit, got 'v1.2.3'"
+    ExpectNotInstalled "${sandbox}/dist"
+}
+
+function TestPackagesRejectVersionWithHyphen()
+{
+    RunJust tarball --version=1.2-3 --output="${sandbox}/dist"
+    ExpectStatus "${USAGE_ERROR}"
+    ExpectStderrContains "error: expected a version without a hyphen, got '1.2-3'"
+    ExpectNotInstalled "${sandbox}/dist"
+}
+
+function TestPackageScriptRejectsUnknownFormat()
+{
+    timeout "${HANG_TIMEOUT}" "${ROOT_DIR}/scripts/package.sh" --version="${PACKAGE_VERSION}" \
+        --output="${sandbox}/dist" deb rpm > "${sandbox}/stdout" 2> "${sandbox}/stderr"
+    status=$?
+    ExpectStatus "${USAGE_ERROR}"
+    ExpectStderrContains "error: unknown format 'rpm'"
+    ExpectNotInstalled "${sandbox}/dist"
+}
+
+readonly PACMAN="git-purge-branches-${PACKAGE_VERSION}-1-any.pkg.tar.zst"
+
+# Skips the running test and returns 1 unless makepkg exists and may run,
+# which it refuses for root.
+function RequireMakepkg()
+{
+    RequireCommands makepkg || return
+
+    if ((EUID == 0))
+    then
+        Skip "skipped since makepkg refuses to run as root"
+        return 1
+    fi
+}
+
+# Creates a git repository in the sandbox with the files of the checkout,
+# including uncommitted ones, in a single commit, so that the tests control its
+# tags.
+function CreateCheckoutRepository()
+{
+    local checkout="${sandbox}/checkout"
+
+    git -C "${ROOT_DIR}" ls-files -z --cached --others --exclude-standard > "${sandbox}/files"
+    tar --create --file="${sandbox}/checkout.tar" --directory="${ROOT_DIR}" --null \
+        --files-from="${sandbox}/files"
+    mkdir "${checkout}"
+    tar --extract --file="${sandbox}/checkout.tar" --directory="${checkout}"
+    git -C "${checkout}" init -q -b master
+    git -C "${checkout}" add --all
+    git -C "${checkout}" commit -q -m checkout
+}
+
+# Extracts the archive that git archive creates of the repository of
+# CreateCheckoutRepository, as a release on GitHub offers it, into the sandbox.
+function CreateSourceArchive()
+{
+    git -C "${sandbox}/checkout" archive --output="${sandbox}/archive.tar" HEAD
+    mkdir "${sandbox}/archive"
+    tar --extract --file="${sandbox}/archive.tar" --directory="${sandbox}/archive"
+}
+
+# Runs scripts/version.sh of the sources in the given directory with the
+# remaining arguments and stores its exit status.
+function RunVersionIn()
+{
+    local directory="$1"
+    shift
+
+    timeout "${HANG_TIMEOUT}" "${directory}/scripts/version.sh" "$@" \
+        > "${sandbox}/stdout" 2> "${sandbox}/stderr"
+    status=$?
+}
+
+function TestVersionOfTaggedCommit()
+{
+    CreateCheckoutRepository
+    git -C "${sandbox}/checkout" tag "v${PACKAGE_VERSION}"
+    RunVersionIn "${sandbox}/checkout" version
+    ExpectStatus 0
+    ExpectStdout "${PACKAGE_VERSION}"
+}
+
+function TestVersionOfCommitAfterTag()
+{
+    local hash
+
+    CreateCheckoutRepository
+    git -C "${sandbox}/checkout" tag "v${PACKAGE_VERSION}"
+    git -C "${sandbox}/checkout" commit -q --allow-empty -m next
+    hash="$(git -C "${sandbox}/checkout" rev-parse --short HEAD)"
+    RunVersionIn "${sandbox}/checkout" version
+    ExpectStatus 0
+    ExpectStdout "${PACKAGE_VERSION}.r1.${hash}"
+}
+
+# Debian requires versions to start with a digit.
+function TestVersionWithoutTag()
+{
+    local hash
+
+    CreateCheckoutRepository
+    git -C "${sandbox}/checkout" commit -q --allow-empty -m next
+    hash="$(git -C "${sandbox}/checkout" rev-parse --short HEAD)"
+    RunVersionIn "${sandbox}/checkout" version
+    ExpectStatus 0
+    ExpectStdout "0.r2.${hash}"
+}
+
+function TestVersionOfArchive()
+{
+    CreateCheckoutRepository
+    git -C "${sandbox}/checkout" tag "v${PACKAGE_VERSION}"
+    CreateSourceArchive
+    RunVersionIn "${sandbox}/archive" version
+    ExpectStatus 0
+    ExpectStdout "${PACKAGE_VERSION}"
+}
+
+function TestVersionOfArchiveWithoutTag()
+{
+    CreateCheckoutRepository
+    CreateSourceArchive
+    RunVersionIn "${sandbox}/archive" version
+    ExpectStatus 1
+    ExpectStderrContains "error: expected a tag that describes the archived commit, got none"
+}
+
+function TestDateOfCheckoutAndArchive()
+{
+    local date
+
+    CreateCheckoutRepository
+    git -C "${sandbox}/checkout" tag "v${PACKAGE_VERSION}"
+    date="$(git -C "${sandbox}/checkout" log -1 --format=%ct)"
+    CreateSourceArchive
+    RunVersionIn "${sandbox}/checkout" date
+    ExpectStatus 0
+    ExpectStdout "${date}"
+    RunVersionIn "${sandbox}/archive" date
+    ExpectStatus 0
+    ExpectStdout "${date}"
+}
+
+# Runs makepkg for the PKGBUILD of the sources in the given directory, as a
+# user would, with its outputs in the sandbox. The dependencies are not
+# checked, since systems other than Arch lack the database of pacman. The
+# extension of the package follows the configuration of makepkg.
+function RunMakepkgIn()
+{
+    local directory="$1"
+
+    (cd "${directory}" && PKGDEST="${sandbox}/packages" BUILDDIR="${sandbox}/build" \
+        SRCDEST="${sandbox}/sources" timeout "${HANG_TIMEOUT}" makepkg --nodeps -D pacman) \
+        > "${sandbox}/stdout" 2> "${sandbox}/stderr"
+    status=$?
+}
+
+function TestMakepkgBuildsTaggedCheckout()
+{
+    RequireMakepkg || return
+
+    CreateCheckoutRepository
+    git -C "${sandbox}/checkout" tag "v${PACKAGE_VERSION}"
+    RunMakepkgIn "${sandbox}/checkout"
+    ExpectStatus 0
+    ExpectExists "${sandbox}/packages/${PACMAN%.tar.zst}.tar."*
+}
+
+function TestMakepkgBuildsArchive()
+{
+    RequireMakepkg || return
+
+    CreateCheckoutRepository
+    git -C "${sandbox}/checkout" tag "v${PACKAGE_VERSION}"
+    CreateSourceArchive
+    RunMakepkgIn "${sandbox}/archive"
+    ExpectStatus 0
+    ExpectExists "${sandbox}/packages/${PACMAN%.tar.zst}.tar."*
+}
+
+function TestPackagesDefaultToVersionOfSources()
+{
+    CreateCheckoutRepository
+    git -C "${sandbox}/checkout" tag "v${PACKAGE_VERSION}"
+    RunJustIn "${sandbox}/checkout" tarball --output="${sandbox}/dist"
+    ExpectStatus 0
+    ExpectExists "${sandbox}/dist/${TARBALL}"
+}
+
+# An archive of the sources, such as one that GitHub offers for a release, has
+# no repository of git.
+function TestPackagesBuildFromArchive()
+{
+    RequireCommands dpkg-buildpackage dh || return
+
+    CreateCheckoutRepository
+    git -C "${sandbox}/checkout" tag "v${PACKAGE_VERSION}"
+    CreateSourceArchive
+    RunJustIn "${sandbox}/archive" tarball --output="${sandbox}/dist"
+    ExpectStatus 0
+    ExpectExists "${sandbox}/dist/${TARBALL}"
+    RunJustIn "${sandbox}/archive" deb --output="${sandbox}/dist"
+    ExpectStatus 0
+    ExpectExists "${sandbox}/dist/${DEB}"
+}
+
+# The build date is that of the last commit.
+function TestPacmanHasPackageInfo()
+{
+    local fields
+    local date
+
+    RequireMakepkg || return
+
+    date="$(git -C "${ROOT_DIR}" log -1 --format=%ct)"
+    RunJust pacman --version="${PACKAGE_VERSION}" --output="${sandbox}/dist"
+    ExpectStatus 0
+    tar --extract --to-stdout --file="${sandbox}/dist/${PACMAN}" .PKGINFO > "${sandbox}/info"
+    fields="$(grep -E '^(pkgname|pkgver|builddate|packager|arch|depend) = ' "${sandbox}/info")"
+    ExpectLines "${fields}" "pkgname = git-purge-branches
+pkgver = ${PACKAGE_VERSION}-1
+builddate = ${date}
+packager = Sergiu Deitsch <sergiu.deitsch@gmail.com>
+arch = any
+depend = bash
+depend = git>=2.41"
+}
+
+# makepkg compresses the manual pages.
+function TestPacmanInstallsFilesBelowUsr()
+{
+    RequireMakepkg || return
+
+    RunJust pacman --version="${PACKAGE_VERSION}" --output="${sandbox}/dist"
+    ExpectStatus 0
+    tar --list --verbose --file="${sandbox}/dist/${PACMAN}" > "${sandbox}/listing"
+    # The metadata of pacman, such as .PKGINFO, is no installed file.
+    sed --in-place '/ \.[A-Z]*$/d' "${sandbox}/listing"
+    ExpectArchiveFiles "${sandbox}/listing" \
+"-rwxr-xr-x root/root usr/bin/git-purge-branches
+-rw-r--r-- root/root usr/share/bash-completion/completions/git-purge-branches
+-rw-r--r-- root/root usr/share/fish/vendor_completions.d/git-purge-branches.fish
+-rw-r--r-- root/root usr/share/man/man1/git-purge-branches.1.gz
+-rw-r--r-- root/root usr/share/zsh/site-functions/_git-purge-branches"
+}
+
+function TestPacmanContainsSources()
+{
+    local root="${sandbox}/root"
+
+    RequireMakepkg || return
+
+    RunJust pacman --version="${PACKAGE_VERSION}" --output="${sandbox}/dist"
+    ExpectStatus 0
+    mkdir "${root}"
+    tar --extract --file="${sandbox}/dist/${PACMAN}" --directory="${root}"
+    gzip --decompress --keep "${root}/usr/share/man/man1/git-purge-branches.1.gz"
+
+    ExpectSameContents "${root}/usr/bin/git-purge-branches" "${SCRIPT}"
+    ExpectSameContents "${root}/usr/share/man/man1/git-purge-branches.1" "${MAN_PAGE}"
+    ExpectSameContents "${root}/usr/share/bash-completion/completions/git-purge-branches" "${COMPLETION}"
+    ExpectSameContents "${root}/usr/share/zsh/site-functions/_git-purge-branches" "${ZSH_COMPLETION}"
+    ExpectSameContents "${root}/usr/share/fish/vendor_completions.d/git-purge-branches.fish" "${FISH_COMPLETION}"
+}
+
+# Two builds of the same commit yield the same files, so that anyone can verify
+# a release artifact. The pacman package records the directories of its build,
+# so only a build at the same paths reproduces it.
+function TestPackagesAreReproducible()
+{
+    RequireCommands dpkg-buildpackage dh || return
+
+    RunJust deb --version="${PACKAGE_VERSION}" --output="${sandbox}/first"
+    RunJust tarball --version="${PACKAGE_VERSION}" --output="${sandbox}/first"
+    sleep 1
+    RunJust deb --version="${PACKAGE_VERSION}" --output="${sandbox}/second"
+    RunJust tarball --version="${PACKAGE_VERSION}" --output="${sandbox}/second"
+    ExpectStatus 0
+    ExpectSameContents "${sandbox}/second/${DEB}" "${sandbox}/first/${DEB}"
+    ExpectSameContents "${sandbox}/second/${TARBALL}" "${sandbox}/first/${TARBALL}"
 }
 
 # Completes the last of the given words of a command line in the test
@@ -1253,18 +1756,23 @@ function Run()
 {
     local name="$1"
     test_failed=0
+    test_skipped=0
     ((++tests))
 
     SetUp
     "${name}"
     TearDown
 
-    if [[ ${test_failed} -eq 0 ]]
+    if [[ ${test_failed} -ne 0 ]]
     then
-        echo "PASS ${name}"
-    else
         echo "FAIL ${name}"
         ((++failures))
+    elif [[ ${test_skipped} -ne 0 ]]
+    then
+        echo "SKIP ${name}"
+        ((++skipped))
+    else
+        echo "PASS ${name}"
     fi
 }
 
@@ -1332,6 +1840,30 @@ Run TestUninstallCompletionsRemovesOnlyCompletions
 Run TestUninstallBashCompletionRemovesOnlyIt
 Run TestUninstallZshCompletionRemovesOnlyIt
 Run TestUninstallFishCompletionRemovesOnlyIt
+Run TestDebHasControlFields
+Run TestDebInstallsFilesBelowUsr
+Run TestDebHasModesUnderRestrictiveUmask
+Run TestDebHasChangelogOfRelease
+Run TestDebContainsSources
+Run TestTarballHasInstallLayout
+Run TestTarballContainsSources
+Run TestPackagesRejectVersionWithoutLeadingDigit
+Run TestPackagesRejectVersionWithHyphen
+Run TestPackageScriptRejectsUnknownFormat
+Run TestVersionOfTaggedCommit
+Run TestVersionOfCommitAfterTag
+Run TestVersionWithoutTag
+Run TestVersionOfArchive
+Run TestVersionOfArchiveWithoutTag
+Run TestDateOfCheckoutAndArchive
+Run TestMakepkgBuildsTaggedCheckout
+Run TestMakepkgBuildsArchive
+Run TestPackagesDefaultToVersionOfSources
+Run TestPackagesBuildFromArchive
+Run TestPacmanHasPackageInfo
+Run TestPacmanInstallsFilesBelowUsr
+Run TestPacmanContainsSources
+Run TestPackagesAreReproducible
 Run TestCompletesLongOptions
 Run TestCompletesLongOptionsForDash
 Run TestCompletesOptionWithPrefix
@@ -1367,5 +1899,5 @@ Run TestFishCompletesNothingAfterHelp
 Run TestFishCompletesOptionOfStandaloneCommand
 Run TestFishCompletesCommitOfStandaloneCommand
 
-echo "${failures} of ${tests} tests failed"
+echo "${failures} of ${tests} tests failed, ${skipped} skipped"
 [[ ${failures} -eq 0 ]]

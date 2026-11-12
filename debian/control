@@ -1,0 +1,20 @@
+# SPDX-FileCopyrightText: 2026 Sergiu Deitsch
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+Source: git-purge-branches
+Section: vcs
+Priority: optional
+Maintainer: Sergiu Deitsch <sergiu.deitsch@gmail.com>
+Build-Depends: debhelper-compat (= 13), asciidoctor, groff-base
+Standards-Version: 4.7.2
+Rules-Requires-Root: no
+
+Package: git-purge-branches
+Architecture: all
+Depends: ${misc:Depends}, git (>= 1:2.41)
+Description: delete local branches merged into a commit
+ git purge-branches deletes the local branches merged into a commit, HEAD by
+ default, except those checked out in any worktree and those exempt through
+ branch.<name>.deleteMerged. With --equivalent, it also deletes branches that
+ a remote rebased before merging.

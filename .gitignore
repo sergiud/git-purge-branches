@@ -4,3 +4,11 @@
 
 # Manual pages that just man generates from doc/man
 /man/man[1-9]/*.[1-9]
+
+# Release packages that just deb, just pacman and just tarball build
+/dist/
+
+# Outputs of makepkg -D pacman in the checkout
+/pacman/src/
+/pacman/pkg/
+/pacman/*.pkg.tar.*

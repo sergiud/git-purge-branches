@@ -1,0 +1,9 @@
+# SPDX-FileCopyrightText: 2026 Sergiu Deitsch
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# git archive replaces the placeholders below with the description of the
+# archived commit by its tags and its date, so that scripts/version.sh can
+# report both without git.
+describe=$Format:%(describe:tags=true)$
+date=$Format:%ct$

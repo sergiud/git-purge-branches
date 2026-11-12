@@ -1,0 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Sergiu Deitsch
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Archives record the version and date of their commit in this file.
+/scripts/source-info export-subst

@@ -75,3 +75,21 @@ uninstall-zsh-completion prefix=default_prefix:
 [arg("prefix", long="prefix", help="installation prefix, /usr/local for root and ~/.local otherwise")]
 uninstall-fish-completion prefix=default_prefix:
     ./scripts/install.sh --uninstall --prefix={{ quote(prefix) }} fish
+
+# Builds the Debian package of a release into the output directory.
+[arg("version", long="version", help="version of the release, such as 1.2.3, by default that of the sources")]
+[arg("output", long="output", help="directory of the package")]
+deb version="" output="dist": man
+    ./scripts/package.sh --version={{ quote(version) }} --output={{ quote(output) }} deb
+
+# Builds a tarball of a release with the install layout into the output directory.
+[arg("version", long="version", help="version of the release, such as 1.2.3, by default that of the sources")]
+[arg("output", long="output", help="directory of the tarball")]
+tarball version="" output="dist": man
+    ./scripts/package.sh --version={{ quote(version) }} --output={{ quote(output) }} tarball
+
+# Builds the pacman package of a release into the output directory.
+[arg("version", long="version", help="version of the release, such as 1.2.3, by default that of the sources")]
+[arg("output", long="output", help="directory of the package")]
+pacman version="" output="dist": man
+    ./scripts/package.sh --version={{ quote(version) }} --output={{ quote(output) }} pacman

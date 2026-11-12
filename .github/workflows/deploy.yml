@@ -1,0 +1,39 @@
+# SPDX-FileCopyrightText: 2026 Sergiu Deitsch
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Builds the Debian and pacman packages and the tarball of a published release
+# and attaches them to the release. Pushes and pull requests do not run it.
+name: Deploy
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-26.04
+    steps:
+      - run: sudo apt-get update
+      - run: >-
+          sudo apt-get install --yes --no-install-recommends git pipx asciidoctor
+          groff-base debhelper makepkg pacman-package-manager libarchive-tools zstd
+      # The recipes take options, which just supports from 1.46, a release newer
+      # than that of Ubuntu.
+      - run: sudo pipx install --global rust-just==1.59.0
+      - uses: actions/checkout@v7
+      # Release tags such as v1.2.3 carry a prefix that package versions lack.
+      - env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          just deb --version="${TAG#v}"
+          just pacman --version="${TAG#v}"
+          just tarball --version="${TAG#v}"
+      # The runner provides the GitHub CLI.
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "${TAG}" dist/* --repo "${GITHUB_REPOSITORY}"
