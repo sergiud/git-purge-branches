@@ -8,17 +8,19 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 `git purge-branches` deletes the local branches merged into a commit, `HEAD`
 by default. It keeps the branches checked out in any worktree and those exempt
-through `branch.<name>.deleteMerged`. With `--equivalent`, it also deletes
-branches that a remote such as GitLab or GitHub rebased before merging.
+through `branch.<name>.deleteMerged`. The option `--equivalent` additionally
+deletes branches that a remote such as GitLab or GitHub rebased before merging,
+which the default keeps since their commits differ from the merged ones.
 
-```console
-$ git purge-branches --dry-run --equivalent
-$ git purge-branches --equivalent
+```bash
+git purge-branches --dry-run
+git purge-branches
 ```
 
-The manual page in `doc/man/git-purge-branches.adoc` describes every option,
-the exit status and how the command differs from
-`git branch --delete-merged`.
+`git branch --delete-merged` selects branches by their upstream and keeps those
+without one or with a deleted one. `git purge-branches` deletes the branches
+merged into the commit whether they track a remote branch or not, so it also
+cleans up topic branches whose remote branches were merged and deleted.
 
 ## Installation
 
@@ -29,10 +31,10 @@ Bash, zsh and fish below a prefix, `/usr/local` when run as root and
 `~/.local` otherwise. `--prefix` selects another prefix, and `DESTDIR` stages
 the files below a directory, as for a package:
 
-```console
-$ just install
-$ sudo just install --prefix=/usr
-$ DESTDIR=/tmp/stage just install --prefix=/usr
+```bash
+just install
+sudo just install --prefix=/usr
+DESTDIR=/tmp/stage just install --prefix=/usr
 ```
 
 `just install-completions` installs only the completions, and
@@ -70,8 +72,8 @@ source code that GitHub offers for a release, carries its version without git.
 
 The top-level directory of the tarball holds the install layout:
 
-```console
-$ tar -xzf git-purge-branches-1.2.3.tar.gz --strip-components=1 -C ~/.local
+```bash
+tar -xzf git-purge-branches-1.2.3.tar.gz --strip-components=1 -C ~/.local
 ```
 
 On Arch Linux, `makepkg -D pacman` in the sources builds the package as well,
