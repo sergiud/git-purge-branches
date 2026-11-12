@@ -39,20 +39,21 @@ function TearDown()
     rm -Rf "${sandbox}"
 }
 
-# Runs the script under test in the given directory and stores its exit
-# status.
+# Runs the script under test in the given directory with the remaining
+# arguments and stores its exit status.
 function RunPurgeIn()
 {
     local directory="$1"
+    shift
 
-    (cd "${directory}" && /bin/bash "${SCRIPT}") \
+    (cd "${directory}" && /bin/bash "${SCRIPT}" "$@") \
         > "${sandbox}/stdout" 2> "${sandbox}/stderr"
     status=$?
 }
 
 function RunPurge()
 {
-    RunPurgeIn "${repo}"
+    RunPurgeIn "${repo}" "$@"
 }
 
 # Creates a branch with a commit that the current branch lacks.
@@ -190,6 +191,52 @@ function TestIgnoresColorConfiguration()
     ExpectBranches master
 }
 
+function TestKeepsBranchGivenAsCommit()
+{
+    Git branch feature
+    Git branch merged
+    RunPurge feature
+    ExpectStatus 0
+    ExpectBranches feature master
+}
+
+function TestKeepsBranchGivenAsFullRefName()
+{
+    Git branch feature
+    Git branch merged
+    RunPurge refs/heads/feature
+    ExpectStatus 0
+    ExpectBranches feature master
+}
+
+# A tag names no branch, so a branch at the same commit is deleted.
+function TestDeletesBranchAtGivenTag()
+{
+    Git tag v1
+    Git branch release
+    RunPurge v1
+    ExpectStatus 0
+    ExpectBranches master
+}
+
+function TestDeletesBranchNamedLikeGivenTag()
+{
+    Git tag v1
+    Git branch refs/tags/v1
+    RunPurge v1
+    ExpectStatus 0
+    ExpectBranches master
+}
+
+function TestReportsInvalidCommit()
+{
+    Git branch feature
+    RunPurge missing
+    ExpectStatus "${GIT_NOT_A_REPOSITORY}"
+    ExpectStderrContains "error: failed to list branches"
+    ExpectBranches feature master
+}
+
 function TestReportsFailureOutsideRepository()
 {
     mkdir "${sandbox}/plain"
@@ -226,6 +273,11 @@ Run TestDeletesBranchWithPlusInName
 Run TestDeletesBranchSharingNameWithTag
 Run TestKeepsBranchAheadOfUpstream
 Run TestIgnoresColorConfiguration
+Run TestKeepsBranchGivenAsCommit
+Run TestKeepsBranchGivenAsFullRefName
+Run TestDeletesBranchAtGivenTag
+Run TestDeletesBranchNamedLikeGivenTag
+Run TestReportsInvalidCommit
 Run TestReportsFailureOutsideRepository
 
 echo "${failures} of ${tests} tests failed"

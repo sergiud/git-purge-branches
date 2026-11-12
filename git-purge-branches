@@ -2,16 +2,19 @@
 
 set -euo pipefail
 
-# List branches merged into HEAD except those checked out in any worktree,
-# which includes the current branch. Unlike the output of git branch, the
-# format is not affected by the user's color or column configuration.
+# Branches merged into this commit are deleted.
+commit="${1:-HEAD}"
+
+# List branches merged into the commit except those checked out in any
+# worktree, which includes the current branch. Unlike the output of git branch,
+# the format is not affected by the user's color or column configuration.
 # shellcheck disable=SC2312 # wait reports the status of the substitution
-exec {fd}< <(git for-each-ref --merged=HEAD --omit-empty \
-    --format='%(if)%(worktreepath)%(then)%(else)%(refname:lstrip=2)%(end)' \
+exec {fd}< <(git for-each-ref --merged="${commit}" --omit-empty \
+    --format='%(if)%(worktreepath)%(then)%(else)%(refname)%(end)' \
     refs/heads/)
 declare -i pid=$!
 
-readarray -u "${fd}" -t branches
+readarray -u "${fd}" -t refs
 exec {fd}<&-
 
 declare -i status=0
@@ -21,6 +24,20 @@ if ((status != 0)); then
     echo "error: failed to list branches, git exited with status ${status}" >&2
     exit "${status}"
 fi
+
+# Every branch is merged into itself, so the list includes the branch given as
+# the commit, which is kept. For the default HEAD, this is the current branch,
+# which the list already omits because it is checked out. Full ref names are
+# compared, since a branch may be named like the full ref of a tag, such as
+# refs/tags/v1.
+target="$(git rev-parse --symbolic-full-name "${commit}")"
+branches=()
+
+for ref in "${refs[@]}"; do
+    if [[ ${ref} != "${target}" ]]; then
+        branches+=("${ref#refs/heads/}")
+    fi
+done
 
 if [[ ${#branches[@]} -ne 0 ]]; then
     git branch -d "${branches[@]}"
