@@ -12,3 +12,6 @@
 /pacman/src/
 /pacman/pkg/
 /pacman/*.pkg.tar.*
+
+# The site that just pages renders for GitHub Pages
+/site/

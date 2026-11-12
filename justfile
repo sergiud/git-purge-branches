@@ -97,3 +97,8 @@ tarball version="" output="dist": man
 [arg("output", long="output", help="directory of the package")]
 pacman version="" output="dist": man
     ./scripts/package.sh --version={{ quote(version) }} --output={{ quote(output) }} pacman
+
+# Renders the manual page as the HTML page of the site for GitHub Pages.
+[arg("output", long="output", help="directory of the site")]
+pages output="site":
+    asciidoctor --backend html5 --failure-level WARN --out-file {{ quote(output / "index.html") }} doc/man/git-purge-branches.adoc

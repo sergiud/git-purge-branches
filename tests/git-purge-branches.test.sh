@@ -1526,6 +1526,20 @@ function TestGetRejectsRelativePrefix()
     ExpectNotInstalled "${sandbox}/relative"
 }
 
+# GitHub Pages serves the manual page of the command as the page of the site.
+function TestPagesRenderManualPage()
+{
+    local page="${sandbox}/site/index.html"
+
+    RunJust pages --output="${sandbox}/site"
+    ExpectStatus 0
+    ExpectExists "${page}"
+    # The title, the synopsis and the last section show the whole manual.
+    grep -q '<title>git-purge-branches(1)</title>' "${page}" || Fail "expected the title of the manual in '${page}'"
+    grep -q 'git purge-branches</strong> \[<strong>-n</strong>' "${page}" || Fail "expected the synopsis in '${page}'"
+    grep -q '>See also<' "${page}" || Fail "expected the last section in '${page}'"
+}
+
 # Two builds of the same commit yield the same files, so that anyone can verify
 # a release artifact. The pacman package records the directories of its build,
 # so only a build at the same paths reproduces it.
@@ -2007,6 +2021,7 @@ Run TestPackagesBuildFromArchive
 Run TestPacmanHasPackageInfo
 Run TestPacmanInstallsFilesBelowUsr
 Run TestPacmanContainsSources
+Run TestPagesRenderManualPage
 Run TestPackagesAreReproducible
 Run TestGetInstallsLatestRelease
 Run TestGetInstallsGivenVersionBelowPrefix

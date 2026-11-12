@@ -1,0 +1,43 @@
+# SPDX-FileCopyrightText: 2026 Sergiu Deitsch
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Publishes the manual page of a published release on GitHub Pages, so that
+# the page matches the version that users install. Pushes and pull requests do
+# not run it.
+name: Pages
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# A later release waits for the deployment of an earlier one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  pages:
+    runs-on: ubuntu-26.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - run: sudo apt-get update
+      - run: sudo apt-get install --yes --no-install-recommends pipx asciidoctor
+      # The recipes take options, which just supports from 1.46, a release newer
+      # than that of Ubuntu.
+      - run: sudo pipx install --global rust-just==1.59.0
+      - uses: actions/checkout@v7
+      - run: just pages
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v5
