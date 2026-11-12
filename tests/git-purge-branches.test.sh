@@ -47,6 +47,7 @@ function SetUp()
 {
     sandbox="$(mktemp -d)"
     repo="${sandbox}/repo"
+    server_pid=
 
     export GIT_CONFIG_GLOBAL=/dev/null
     export GIT_CONFIG_NOSYSTEM=1
@@ -62,6 +63,12 @@ function SetUp()
 
 function TearDown()
 {
+    if [[ -n ${server_pid} ]]; then
+        kill "${server_pid}"
+        wait "${server_pid}"
+        server_pid=
+    fi
+
     rm -Rf "${sandbox}"
 }
 
@@ -1365,6 +1372,160 @@ function TestPacmanContainsSources()
     ExpectSameContents "${root}/usr/share/fish/vendor_completions.d/git-purge-branches.fish" "${FISH_COMPLETION}"
 }
 
+readonly RELEASE_SERVER="${ROOT_DIR}/tests/release-server.py"
+
+# Serves a release of the version of the packages in the sandbox as GitHub
+# serves release assets, with the given tag as the latest release, and stores
+# the URL of its releases in releases.
+function StartReleaseServer()
+{
+    local latest_tag="$1"
+    local assets="${sandbox}/server/releases/download/v${PACKAGE_VERSION}"
+    local -i waited=0
+
+    RunJust tarball --version="${PACKAGE_VERSION}" --output="${assets}"
+    (cd "${assets}" && sha256sum "${TARBALL}" >SHA256SUMS)
+
+    python3 "${RELEASE_SERVER}" "${sandbox}/server" "${latest_tag}" "${sandbox}/port" &
+    server_pid=$!
+
+    # The server writes the port once it accepts connections.
+    until [[ -s ${sandbox}/port ]]; do
+        if ((++waited > HANG_TIMEOUT * 10)); then
+            Fail "expected the release server to start within ${HANG_TIMEOUT} s"
+            return 1
+        fi
+        sleep 0.1
+    done
+
+    releases="http://127.0.0.1:$(<"${sandbox}/port")/releases"
+}
+
+# Runs install.sh from standard input with the given arguments, as
+# curl ... | bash -s -- <arguments> does, against the release server, and
+# stores its exit status.
+function RunGet()
+{
+    (cd "${sandbox}" && HOME="${sandbox}/home" PATH="${sandbox}/fake-bin:${PATH}" \
+        GIT_PURGE_BRANCHES_RELEASES="${releases}" \
+        timeout "${HANG_TIMEOUT}" bash -s -- "$@" <"${ROOT_DIR}/install.sh") \
+        >"${sandbox}/stdout" 2>"${sandbox}/stderr"
+    status=$?
+}
+
+function TestGetInstallsLatestRelease()
+{
+    StartReleaseServer "v${PACKAGE_VERSION}" || return
+    FakeUserId 1000
+    RunGet
+    ExpectStatus 0
+    ExpectScriptAndManPageInstalled "${sandbox}/home/.local"
+    ExpectCompletionsInstalled "${sandbox}/home/.local"
+}
+
+# The latest release differs from the requested one, which the server has.
+function TestGetInstallsGivenVersionBelowPrefix()
+{
+    StartReleaseServer v9.9.9 || return
+    RunGet --version="${PACKAGE_VERSION}" --prefix="${sandbox}/prefix"
+    ExpectStatus 0
+    ExpectScriptAndManPageInstalled "${sandbox}/prefix"
+    ExpectCompletionsInstalled "${sandbox}/prefix"
+}
+
+# A user other than root cannot write to /usr/local, which the error names.
+function TestGetDefaultsToUsrLocalWithRoot()
+{
+    if ((EUID == 0)); then
+        Skip "skipped since root may write to /usr/local"
+        return
+    fi
+
+    StartReleaseServer "v${PACKAGE_VERSION}" || return
+    FakeUserId 0
+    RunGet
+    ExpectStatus 1
+    ExpectStderrContains "error: failed to install git-purge-branches ${PACKAGE_VERSION} below '/usr/local'"
+}
+
+function TestGetRejectsTamperedTarball()
+{
+    local assets="${sandbox}/server/releases/download/v${PACKAGE_VERSION}"
+
+    StartReleaseServer "v${PACKAGE_VERSION}" || return
+    echo tampered >>"${assets}/${TARBALL}"
+    RunGet --prefix="${sandbox}/prefix"
+    ExpectStatus 1
+    ExpectStderrContains "error: expected the checksum of ${TARBALL} in SHA256SUMS"
+    ExpectNotInstalled "${sandbox}/prefix"
+}
+
+function TestGetRejectsTarballWithoutChecksum()
+{
+    local assets="${sandbox}/server/releases/download/v${PACKAGE_VERSION}"
+
+    StartReleaseServer "v${PACKAGE_VERSION}" || return
+    : >"${assets}/SHA256SUMS"
+    RunGet --prefix="${sandbox}/prefix"
+    ExpectStatus 1
+    ExpectStderrContains "error: expected the checksum of ${TARBALL} in SHA256SUMS"
+    ExpectNotInstalled "${sandbox}/prefix"
+}
+
+function TestGetReportsMissingRelease()
+{
+    StartReleaseServer "v${PACKAGE_VERSION}" || return
+    RunGet --version=9.9.9 --prefix="${sandbox}/prefix"
+    ExpectStatus 1
+    ExpectStderrContains "error: failed to download git-purge-branches-9.9.9.tar.gz"
+    ExpectNotInstalled "${sandbox}/prefix"
+}
+
+# The directories may hold files of other packages, such as the completions of
+# other commands.
+function TestGetUninstallsRelease()
+{
+    local other_completion="${sandbox}/prefix/${INSTALLED_ZSH_COMPLETION%/*}/_other"
+
+    StartReleaseServer "v${PACKAGE_VERSION}" || return
+    RunGet --prefix="${sandbox}/prefix"
+    touch "${other_completion}"
+    RunGet --prefix="${sandbox}/prefix" --uninstall
+    ExpectStatus 0
+    ExpectNothingInstalled "${sandbox}/prefix"
+    ExpectNotInstalled "${sandbox}/prefix/share/doc/git-purge-branches/GPL-3.0-or-later.txt"
+    ExpectExists "${other_completion}"
+}
+
+# macOS extracts with the tar of libarchive, which bsdtar provides elsewhere.
+function TestGetInstallsWithBsdtar()
+{
+    local bsdtar
+
+    RequireCommands bsdtar || return
+
+    bsdtar="$(command -v bsdtar)"
+    StartReleaseServer "v${PACKAGE_VERSION}" || return
+    mkdir -p "${sandbox}/fake-bin"
+    ln -s "${bsdtar}" "${sandbox}/fake-bin/tar"
+    RunGet --prefix="${sandbox}/prefix"
+    ExpectStatus 0
+    ExpectScriptAndManPageInstalled "${sandbox}/prefix"
+    ExpectCompletionsInstalled "${sandbox}/prefix"
+    RunGet --prefix="${sandbox}/prefix" --uninstall
+    ExpectStatus 0
+    ExpectNothingInstalled "${sandbox}/prefix"
+}
+
+function TestGetRejectsRelativePrefix()
+{
+    StartReleaseServer "v${PACKAGE_VERSION}" || return
+    RunGet --prefix=relative
+    ExpectStatus "${USAGE_ERROR}"
+    ExpectStderrContains "error: expected an absolute prefix, got 'relative'"
+    ExpectNotInstalled "${sandbox}/relative"
+}
+
 # Two builds of the same commit yield the same files, so that anyone can verify
 # a release artifact. The pacman package records the directories of its build,
 # so only a build at the same paths reproduces it.
@@ -1847,6 +2008,15 @@ Run TestPacmanHasPackageInfo
 Run TestPacmanInstallsFilesBelowUsr
 Run TestPacmanContainsSources
 Run TestPackagesAreReproducible
+Run TestGetInstallsLatestRelease
+Run TestGetInstallsGivenVersionBelowPrefix
+Run TestGetDefaultsToUsrLocalWithRoot
+Run TestGetRejectsTamperedTarball
+Run TestGetRejectsTarballWithoutChecksum
+Run TestGetReportsMissingRelease
+Run TestGetUninstallsRelease
+Run TestGetInstallsWithBsdtar
+Run TestGetRejectsRelativePrefix
 Run TestCompletesLongOptions
 Run TestCompletesLongOptionsForDash
 Run TestCompletesOptionWithPrefix

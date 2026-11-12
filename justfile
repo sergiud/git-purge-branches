@@ -6,7 +6,7 @@
 default_prefix := if `id -u` == "0" { "/usr/local" } else { home_directory() / ".local" }
 
 # The Bash scripts, which the linters check
-shell_scripts := "git-purge-branches scripts/*.sh tests/*.sh completion/*.bash"
+shell_scripts := "git-purge-branches install.sh scripts/*.sh tests/*.sh completion/*.bash"
 
 # Components of scripts/install.sh that the recipes install and uninstall
 completions := "bash zsh fish"

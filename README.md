@@ -24,34 +24,24 @@ cleans up topic branches whose remote branches were merged and deleted.
 
 ## Installation
 
-The recipes need [just](https://just.systems) 1.46 or later.
-
-`just install` copies the script, its manual page and the completions for
-Bash, zsh and fish below a prefix, `/usr/local` when run as root and
-`~/.local` otherwise. `--prefix` selects another prefix, and `DESTDIR` stages
-the files below a directory, as for a package:
-
 ```bash
-just install
-sudo just install --prefix=/usr
-DESTDIR=/tmp/stage just install --prefix=/usr
+curl -fsSL https://raw.githubusercontent.com/sergiud/git-purge-branches/master/install.sh | bash
 ```
 
-`just install-completions` installs only the completions, and
-`just install-bash-completion`, `install-zsh-completion` and
-`install-fish-completion` only the one of a shell. Each has an `uninstall`
-counterpart, such as `just uninstall-zsh-completion`, which removes the same
-files from the same prefix.
-
-Below `~/.local`, Git, `man`, Bash and fish find the files once `~/.local/bin`
-is in `PATH`. zsh searches only system directories, so add the user one to
-`fpath` in `~/.zshrc` before `compinit` runs:
+installs the latest release below `~/.local`, or below `/usr/local` as root.
+Arguments after `bash -s --` select another prefix with `--prefix=<dir>` or
+another release with `--version=<version>`, and `--uninstall` removes the
+release again. Git, `man` and the shells find the files below `~/.local` once
+`~/.local/bin` is in `PATH`, except zsh, which needs the directory of its
+completions in `fpath`, set in `~/.zshrc` before `compinit` runs:
 
 ```zsh
 fpath=(~/.local/share/zsh/site-functions $fpath)
 ```
 
-Run the tests with `just test`.
+Each release also provides a Debian and a pacman package. In a checkout,
+`just install` installs the sources with [just](https://just.systems) 1.46 or
+later, and `just test` runs the tests.
 
 ## Packages
 

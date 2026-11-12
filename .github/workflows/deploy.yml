@@ -32,6 +32,8 @@ jobs:
           just deb --version="${TAG#v}"
           just pacman --version="${TAG#v}"
           just tarball --version="${TAG#v}"
+      # install.sh verifies the tarball against these checksums.
+      - run: cd dist && sha256sum -- * > SHA256SUMS
       # The runner provides the GitHub CLI.
       - env:
           GH_TOKEN: ${{ github.token }}
