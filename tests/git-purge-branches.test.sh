@@ -1001,7 +1001,9 @@ function TestCompletesCommitOfStandaloneCommand()
 
 # Completes the given command line in zsh in the test repository, with the
 # completion installed below a prefix whose functions directory is in front of
-# fpath, and stores the matches in stdout, one per line in sorted order.
+# fpath and the script in PATH, as the completion of git requires to list
+# purge-branches as a command. Stores the matches in stdout, one per line in
+# sorted order.
 function CompleteZsh()
 {
     local prefix="${sandbox}/prefix"
@@ -1009,7 +1011,7 @@ function CompleteZsh()
 
     RunJust install-zsh-completion --prefix="${prefix}"
 
-    (cd "${repo}" && timeout "${HANG_TIMEOUT}" \
+    (cd "${repo}" && PATH="${ROOT_DIR}:${PATH}" timeout "${HANG_TIMEOUT}" \
         "${ROOT_DIR}/tests/complete.zsh" "${completion_dir}" "$*") \
         > "${sandbox}/stdout" 2> "${sandbox}/stderr"
     status=$?
@@ -1136,10 +1138,25 @@ function CompleteFish()
         > "${sandbox}/completions" 2> "${sandbox}/stderr"
     status=$?
 
+    local word="${*: -1}"
     local -a completions
+    local completion
+    local match
+
     readarray -t completions < "${sandbox}/completions"
-    # Each completion is a match and a description separated by a tab.
-    printf '%s\n' "${completions[@]%%$'\t'*}" > "${sandbox}/matches"
+
+    # Each completion is a match and a description separated by a tab. Some
+    # releases of fish, such as 4.2, also list matches that contain the word
+    # only as a subsequence, such as --help for --e, which the pager ranks
+    # below the matches that start with the word.
+    for completion in "${completions[@]}"; do
+        match="${completion%%$'\t'*}"
+
+        if [[ ${match} == "${word}"* ]]; then
+            echo "${match}"
+        fi
+    done > "${sandbox}/matches"
+
     LC_ALL=C sort --output="${sandbox}/stdout" "${sandbox}/matches"
 }
 
