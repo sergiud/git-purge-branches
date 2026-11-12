@@ -14,6 +14,14 @@ readonly SCRIPT="${ROOT_DIR}/git-purge-branches"
 readonly COMPLETION="${ROOT_DIR}/completion/git-purge-branches.bash"
 readonly ZSH_COMPLETION="${ROOT_DIR}/completion/_git-purge-branches"
 readonly FISH_COMPLETION="${ROOT_DIR}/completion/git-purge-branches.fish"
+# The manual page that the man recipe generates
+readonly MAN_PAGE="${ROOT_DIR}/man/man1/git-purge-branches.1"
+# Paths of the installed files relative to the prefix
+readonly INSTALLED_SCRIPT=bin/git-purge-branches
+readonly INSTALLED_MAN_PAGE=share/man/man1/git-purge-branches.1
+readonly INSTALLED_COMPLETION=share/bash-completion/completions/git-purge-branches
+readonly INSTALLED_ZSH_COMPLETION=share/zsh/site-functions/_git-purge-branches
+readonly INSTALLED_FISH_COMPLETION=share/fish/vendor_completions.d/git-purge-branches.fish
 # The main script of bash-completion, which loads completions on demand
 BASH_COMPLETION="$(pkg-config --variable=completionsdir bash-completion)/../bash_completion"
 readonly BASH_COMPLETION
@@ -596,19 +604,203 @@ function TestReportsFailureOutsideRepository()
     ExpectStderrContains "error: failed to list branches"
 }
 
+# Makes id report the given user ID to the recipes that RunJust runs, so that
+# the default prefix does not depend on the user who runs the tests.
+function FakeUserId()
+{
+    local uid="$1"
+
+    mkdir -p "${sandbox}/fake-bin"
+    printf '#!/bin/sh\necho %s\n' "${uid}" > "${sandbox}/fake-bin/id"
+    chmod +x "${sandbox}/fake-bin/id"
+}
+
+# Runs the given recipe of the justfile with its arguments and stores its exit
+# status. The home directory is in the sandbox, so that the default prefix of a
+# user never points to the real one.
+function RunJust()
+{
+    (HOME="${sandbox}/home" PATH="${sandbox}/fake-bin:${PATH}" \
+        timeout "${HANG_TIMEOUT}" just --justfile "${ROOT_DIR}/justfile" "$@") \
+        > "${sandbox}/stdout" 2> "${sandbox}/stderr"
+    status=$?
+}
+
+function RunInstallScript()
+{
+    timeout "${HANG_TIMEOUT}" "${ROOT_DIR}/scripts/install.sh" "$@" \
+        > "${sandbox}/stdout" 2> "${sandbox}/stderr"
+    status=$?
+}
+
+function ExpectInstalledFile()
+{
+    local path="$1"
+    local mode="$2"
+    local source="$3"
+    local actual_mode
+
+    if [[ ! -f ${path} ]]
+    then
+        Fail "expected installed file '${path}'"
+        return
+    fi
+
+    actual_mode="$(stat --format=%a "${path}")"
+
+    if [[ ${actual_mode} != "${mode}" ]]
+    then
+        Fail "expected mode ${mode} of '${path}', got ${actual_mode}"
+    fi
+
+    if ! cmp --quiet "${path}" "${source}"
+    then
+        Fail "expected '${path}' to equal '${source}'"
+    fi
+}
+
+function ExpectNotInstalled()
+{
+    local path="$1"
+
+    if [[ -e ${path} ]]
+    then
+        Fail "expected no file '${path}'"
+    fi
+}
+
+function ExpectScriptAndManPageInstalled()
+{
+    local prefix="$1"
+
+    ExpectInstalledFile "${prefix}/${INSTALLED_SCRIPT}" 755 "${SCRIPT}"
+    ExpectInstalledFile "${prefix}/${INSTALLED_MAN_PAGE}" 644 "${MAN_PAGE}"
+}
+
+function ExpectCompletionsInstalled()
+{
+    local prefix="$1"
+
+    ExpectInstalledFile "${prefix}/${INSTALLED_COMPLETION}" 644 "${COMPLETION}"
+    ExpectInstalledFile "${prefix}/${INSTALLED_ZSH_COMPLETION}" 644 "${ZSH_COMPLETION}"
+    ExpectInstalledFile "${prefix}/${INSTALLED_FISH_COMPLETION}" 644 "${FISH_COMPLETION}"
+}
+
+function TestInstallInstallsAllBelowPrefix()
+{
+    RunJust install --prefix="${sandbox}/prefix"
+    ExpectStatus 0
+    ExpectScriptAndManPageInstalled "${sandbox}/prefix"
+    ExpectCompletionsInstalled "${sandbox}/prefix"
+}
+
+function TestInstallAcceptsPrefixWithSpace()
+{
+    RunJust install-completions --prefix="${sandbox}/with space"
+    ExpectStatus 0
+    ExpectCompletionsInstalled "${sandbox}/with space"
+}
+
+function TestInstallDefaultsToLocalOfHomeWithoutRoot()
+{
+    FakeUserId 1000
+    RunJust install
+    ExpectStatus 0
+    ExpectScriptAndManPageInstalled "${sandbox}/home/.local"
+    ExpectCompletionsInstalled "${sandbox}/home/.local"
+}
+
+# DESTDIR keeps the default prefix of root from pointing to the real one.
+function TestInstallDefaultsToUsrLocalWithRoot()
+{
+    FakeUserId 0
+    DESTDIR="${sandbox}/stage" RunJust install
+    ExpectStatus 0
+    ExpectScriptAndManPageInstalled "${sandbox}/stage/usr/local"
+    ExpectCompletionsInstalled "${sandbox}/stage/usr/local"
+}
+
+function TestInstallStagesBelowDestdir()
+{
+    DESTDIR="${sandbox}/stage" RunJust install --prefix=/opt/purge
+    ExpectStatus 0
+    ExpectScriptAndManPageInstalled "${sandbox}/stage/opt/purge"
+    ExpectCompletionsInstalled "${sandbox}/stage/opt/purge"
+}
+
+# A relative prefix would be relative to the directory of the justfile, since
+# just runs recipes there.
+function TestInstallRejectsRelativePrefix()
+{
+    RunJust install-completions --prefix=relative
+    ExpectStatus "${USAGE_ERROR}"
+    ExpectStderrContains "error: expected an absolute prefix, got 'relative'"
+    ExpectNotInstalled "${ROOT_DIR}/relative"
+}
+
+function TestInstallScriptRequiresPrefix()
+{
+    RunInstallScript bash
+    ExpectStatus "${USAGE_ERROR}"
+    ExpectStderrContains "error: expected --prefix"
+}
+
+function TestInstallScriptRejectsUnknownComponent()
+{
+    RunInstallScript --prefix="${sandbox}/prefix" bash tcsh
+    ExpectStatus "${USAGE_ERROR}"
+    ExpectStderrContains "error: unknown component 'tcsh'"
+    ExpectNotInstalled "${sandbox}/prefix"
+}
+
+function TestInstallCompletionsInstallsOnlyCompletions()
+{
+    RunJust install-completions --prefix="${sandbox}/prefix"
+    ExpectStatus 0
+    ExpectCompletionsInstalled "${sandbox}/prefix"
+    ExpectNotInstalled "${sandbox}/prefix/${INSTALLED_SCRIPT}"
+    ExpectNotInstalled "${sandbox}/prefix/${INSTALLED_MAN_PAGE}"
+}
+
+function TestInstallBashCompletionInstallsOnlyIt()
+{
+    RunJust install-bash-completion --prefix="${sandbox}/prefix"
+    ExpectStatus 0
+    ExpectInstalledFile "${sandbox}/prefix/${INSTALLED_COMPLETION}" 644 "${COMPLETION}"
+    ExpectNotInstalled "${sandbox}/prefix/${INSTALLED_ZSH_COMPLETION}"
+    ExpectNotInstalled "${sandbox}/prefix/${INSTALLED_FISH_COMPLETION}"
+}
+
+function TestInstallZshCompletionInstallsOnlyIt()
+{
+    RunJust install-zsh-completion --prefix="${sandbox}/prefix"
+    ExpectStatus 0
+    ExpectInstalledFile "${sandbox}/prefix/${INSTALLED_ZSH_COMPLETION}" 644 "${ZSH_COMPLETION}"
+    ExpectNotInstalled "${sandbox}/prefix/${INSTALLED_COMPLETION}"
+    ExpectNotInstalled "${sandbox}/prefix/${INSTALLED_FISH_COMPLETION}"
+}
+
+function TestInstallFishCompletionInstallsOnlyIt()
+{
+    RunJust install-fish-completion --prefix="${sandbox}/prefix"
+    ExpectStatus 0
+    ExpectInstalledFile "${sandbox}/prefix/${INSTALLED_FISH_COMPLETION}" 644 "${FISH_COMPLETION}"
+    ExpectNotInstalled "${sandbox}/prefix/${INSTALLED_COMPLETION}"
+    ExpectNotInstalled "${sandbox}/prefix/${INSTALLED_ZSH_COMPLETION}"
+}
+
 # Completes the last of the given words of a command line in the test
-# repository, with the completion installed in the user directory of
-# bash-completion, which loads it on demand. Stores the candidates in stdout,
-# one per line without the trailing space that ends a complete word.
+# repository, with the completion installed below ~/.local of a home directory
+# in the sandbox, where bash-completion loads it on demand. Stores the
+# candidates in stdout, one per line without the trailing space that ends a
+# complete word.
 function Complete()
 {
-    local user_dir="${sandbox}/bash-completion"
-
-    mkdir -p "${user_dir}/completions"
-    ln -sf "${COMPLETION}" "${user_dir}/completions/git-purge-branches.bash"
+    RunJust install-bash-completion --prefix="${sandbox}/home/.local"
 
     # shellcheck disable=SC2016 # the inner shell expands the variables
-    (cd "${repo}" && BASH_COMPLETION_USER_DIR="${user_dir}" \
+    (cd "${repo}" && HOME="${sandbox}/home" \
+        env --unset=BASH_COMPLETION_USER_DIR --unset=XDG_DATA_HOME \
         timeout "${HANG_TIMEOUT}" bash --norc --noprofile -c '
             source "$1"
             shift
@@ -703,14 +895,14 @@ function TestCompletesCommitOfStandaloneCommand()
 }
 
 # Completes the given command line in zsh in the test repository, with the
-# completion in a directory in front of fpath, and stores the matches in
-# stdout, one per line in sorted order.
+# completion installed below a prefix whose functions directory is in front of
+# fpath, and stores the matches in stdout, one per line in sorted order.
 function CompleteZsh()
 {
-    local completion_dir="${sandbox}/zsh-completion"
+    local prefix="${sandbox}/prefix"
+    local completion_dir="${prefix}/${INSTALLED_ZSH_COMPLETION%/*}"
 
-    mkdir -p "${completion_dir}"
-    ln -sf "${ZSH_COMPLETION}" "${completion_dir}/_git-purge-branches"
+    RunJust install-zsh-completion --prefix="${prefix}"
 
     (cd "${repo}" && timeout "${HANG_TIMEOUT}" \
         "${ROOT_DIR}/tests/complete.zsh" "${completion_dir}" "$*") \
@@ -819,16 +1011,16 @@ function TestZshCompletesCommitOfStandaloneCommand()
 }
 
 # Completes the given command line in fish in the test repository, with the
-# completion in a directory in front of fish_complete_path and the script in
-# PATH, as the completion of git requires to forward git purge-branches to it.
-# Stores the matches without their descriptions in stdout, one per line in
-# sorted order.
+# completion installed below a prefix whose vendor completions directory is in
+# front of fish_complete_path and the script in PATH, as the completion of git
+# requires to forward git purge-branches to it. Stores the matches without
+# their descriptions in stdout, one per line in sorted order.
 function CompleteFish()
 {
-    local completion_dir="${sandbox}/fish-completion"
+    local prefix="${sandbox}/prefix"
+    local completion_dir="${prefix}/${INSTALLED_FISH_COMPLETION%/*}"
 
-    mkdir -p "${completion_dir}"
-    ln -sf "${FISH_COMPLETION}" "${completion_dir}/git-purge-branches.fish"
+    RunJust install-fish-completion --prefix="${prefix}"
 
     # shellcheck disable=SC2016 # fish expands the variables
     (cd "${repo}" && PATH="${ROOT_DIR}:${PATH}" timeout "${HANG_TIMEOUT}" \
@@ -997,6 +1189,18 @@ Run TestKeepsExemptBranchWithSlashInName
 Run TestReportsInvalidDeleteMerged
 Run TestReportsInvalidCommit
 Run TestReportsFailureOutsideRepository
+Run TestInstallInstallsAllBelowPrefix
+Run TestInstallAcceptsPrefixWithSpace
+Run TestInstallDefaultsToLocalOfHomeWithoutRoot
+Run TestInstallDefaultsToUsrLocalWithRoot
+Run TestInstallStagesBelowDestdir
+Run TestInstallRejectsRelativePrefix
+Run TestInstallScriptRequiresPrefix
+Run TestInstallScriptRejectsUnknownComponent
+Run TestInstallCompletionsInstallsOnlyCompletions
+Run TestInstallBashCompletionInstallsOnlyIt
+Run TestInstallZshCompletionInstallsOnlyIt
+Run TestInstallFishCompletionInstallsOnlyIt
 Run TestCompletesLongOptions
 Run TestCompletesLongOptionsForDash
 Run TestCompletesOptionWithPrefix

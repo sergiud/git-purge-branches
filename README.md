@@ -22,36 +22,27 @@ the exit status and how the command differs from
 
 ## Installation
 
-The command is a single Bash script. Add this directory to `PATH`, and Git
-runs the script as `git purge-branches`. To build the manual page, run
+`just install` copies the script, its manual page and the completions for
+Bash, zsh and fish below a prefix, `/usr/local` when run as root and
+`~/.local` otherwise. `--prefix` selects another prefix, and `DESTDIR` stages
+the files below a directory, as for a package:
 
 ```console
-$ just man
+$ just install
+$ sudo just install --prefix=/usr
+$ DESTDIR=/tmp/stage just install --prefix=/usr
 ```
 
-which writes it below `man/`, where `man` finds it while this directory is in
-`PATH`. Then `git purge-branches --help` or `man git-purge-branches` shows it.
+`just install-completions` installs only the completions, and
+`just install-bash-completion`, `install-zsh-completion` and
+`install-fish-completion` only the one of a shell.
 
-For Bash completion of options and commits, link the completion into the user
-directory of bash-completion, which loads it on demand:
-
-```console
-$ mkdir -p ~/.local/share/bash-completion/completions
-$ ln -s "$PWD/completion/git-purge-branches.bash" ~/.local/share/bash-completion/completions/
-```
-
-For zsh, add the `completion` directory to `fpath` in `~/.zshrc` before
-`compinit` runs:
+Below `~/.local`, Git, `man`, Bash and fish find the files once `~/.local/bin`
+is in `PATH`. zsh searches only system directories, so add the user one to
+`fpath` in `~/.zshrc` before `compinit` runs:
 
 ```zsh
-fpath=(~/path/to/git-purge-branches/completion $fpath)
-```
-
-For fish, link the completion into the completions directory of fish:
-
-```console
-$ mkdir -p ~/.config/fish/completions
-$ ln -s "$PWD/completion/git-purge-branches.fish" ~/.config/fish/completions/
+fpath=(~/.local/share/zsh/site-functions $fpath)
 ```
 
 Run the tests with `just test`.
