@@ -40,3 +40,21 @@ tests:
     - useradd --create-home tester
     - chown -R tester: .
     - su tester -c 'REQUIRE_ALL_TESTS=1 just test'
+
+# Builds the Debian and pacman packages and the tarball, with the version of
+# the sources, to check the packaging without publishing anything.
+packages:
+  stage: test
+  image: ubuntu:26.04
+  script:
+    - apt-get update
+    - >-
+      apt-get install --yes --no-install-recommends git pipx asciidoctor
+      groff-base debhelper makepkg pacman-package-manager libarchive-tools zstd
+    # The recipes take options, which just supports from 1.46, a release newer
+    # than that of Ubuntu.
+    - pipx install --global rust-just==1.59.0
+    # makepkg refuses to run as root, which the image is.
+    - useradd --create-home packager
+    - chown -R packager: .
+    - su packager -c 'just deb && just pacman && just tarball'
