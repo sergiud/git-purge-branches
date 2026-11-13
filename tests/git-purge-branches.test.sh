@@ -29,10 +29,11 @@ readonly BASH_COMPLETION
 readonly GIT_NOT_A_REPOSITORY=128
 # Status of the script for invalid options or arguments
 readonly USAGE_ERROR=2
-# Seconds after which a run of the script counts as hung. A run takes
-# milliseconds, so the limit only ends runs that never finish, even on a
-# loaded machine.
-readonly HANG_TIMEOUT=60
+# Seconds after which a run counts as hung. A run of the script takes
+# milliseconds and a package build seconds, but the first package build on a
+# runner of GitHub took close to a minute, so the limit only ends runs that
+# never finish.
+readonly HANG_TIMEOUT=600
 
 failures=0
 skipped=0
