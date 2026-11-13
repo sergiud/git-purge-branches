@@ -14,7 +14,8 @@ function Usage()
     cat <<USAGE
 usage: ${0##*/} [-n | --dry-run] [-e | --equivalent] [<commit>]
 
-Deletes the branches merged into <commit>, HEAD by default, except those
+Deletes the branches merged into <commit>, by default origin/HEAD or without
+it HEAD, except those
 checked out in any worktree, the branch given as <commit>, the default branches
 of the remotes, those matching a pattern of purge-branches.keep and those with
 branch.<name>.deleteMerged set to false.
@@ -71,8 +72,16 @@ if ((${#positional[@]} > 1)); then
     exit "${USAGE_ERROR}"
 fi
 
-# Branches merged into this commit are deleted.
-commit="${positional[0]:-HEAD}"
+# Branches merged into this commit are deleted. Without one, the default branch
+# of origin, such as origin/main, gathers the merged work, or HEAD in a
+# repository without origin/HEAD.
+if ((${#positional[@]} != 0)); then
+    commit="${positional[0]}"
+elif git rev-parse --verify --quiet refs/remotes/origin/HEAD >/dev/null; then
+    commit=origin/HEAD
+else
+    commit=HEAD
+fi
 
 # The branches that the remotes name as their default, such as main for
 # origin/HEAD, which are always kept.

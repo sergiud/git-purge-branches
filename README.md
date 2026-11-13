@@ -6,9 +6,9 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 # git-purge-branches
 
-`git purge-branches` deletes the local branches merged into a commit, `HEAD`
-by default, and keeps the branches checked out in any worktree and the default
-branches of the remotes.
+`git purge-branches` deletes the local branches merged into a commit, by
+default the default branch of origin, and keeps the branches checked out in any
+worktree and the default branches of the remotes.
 
 ```bash
 git purge-branches --dry-run

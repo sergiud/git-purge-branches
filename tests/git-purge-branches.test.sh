@@ -515,6 +515,47 @@ function TestPrintsNoRestoreHintWithoutDeletedBranches()
     ExpectStdout ""
 }
 
+# Creates the branch feature with a commit of its own and pushes it to origin,
+# whose default branch main then merges it, as a pull request does. The
+# current branch master lacks the commit.
+function CreateBranchMergedIntoOrigin()
+{
+    Git config remote.origin.url "${repo}"
+    Git config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'
+    CreateUnmergedBranch feature
+    Git update-ref refs/remotes/origin/feature feature
+    Git config branch.feature.remote origin
+    Git config branch.feature.merge refs/heads/feature
+    Git update-ref refs/remotes/origin/main feature
+    Git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
+}
+
+function TestDefaultsToDefaultBranchOfOrigin()
+{
+    CreateBranchMergedIntoOrigin
+    RunPurge
+    ExpectStatus 0
+    ExpectBranches master
+}
+
+function TestGivenCommitOverridesDefaultBranchOfOrigin()
+{
+    CreateBranchMergedIntoOrigin
+    Git branch merged
+    RunPurge HEAD
+    ExpectStatus 0
+    ExpectBranches feature master
+}
+
+function TestDryRunDefaultsToDefaultBranchOfOrigin()
+{
+    CreateBranchMergedIntoOrigin
+    RunPurge --dry-run
+    ExpectStatus 0
+    ExpectStdout feature
+    ExpectBranches feature master
+}
+
 function TestDryRunListsMergedBranches()
 {
     Git branch feature
@@ -2403,6 +2444,9 @@ Run TestReportsFailureToDeleteRebasedBranch
 Run TestPrintsHowToRestoreDeletedBranches
 Run TestRestoreHintOmitsRefusedBranches
 Run TestPrintsNoRestoreHintWithoutDeletedBranches
+Run TestDefaultsToDefaultBranchOfOrigin
+Run TestGivenCommitOverridesDefaultBranchOfOrigin
+Run TestDryRunDefaultsToDefaultBranchOfOrigin
 Run TestDryRunListsMergedBranches
 Run TestDryRunListsRebasedBranchesWithEquivalent
 Run TestDryRunOmitsRebasedBranchesByDefault

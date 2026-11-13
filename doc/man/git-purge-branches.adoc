@@ -23,7 +23,7 @@ git-purge-branches - delete local branches merged into a commit
 [#description]
 == Description
 
-Deletes the local branches merged into _<commit>_, `HEAD` by default.
+Deletes the local branches merged into _<commit>_, by default the default branch of origin, `origin/HEAD`, or `HEAD` in a repository without it.
 A branch is merged if its tip is reachable from _<commit>_.
 
 Five kinds of branches are always kept.
@@ -60,7 +60,7 @@ These branches are deleted with linkgit:git-branch[git branch -D], which discard
 Print a usage summary and exit.
 
 [[argument-commit]]_<commit>_::
-The commit the branches are merged into, `HEAD` by default.
+The commit the branches are merged into, by default `origin/HEAD`, or `HEAD` without it.
 Options may precede or follow it.
 
 [#exit-status]
@@ -95,18 +95,18 @@ linkgit:git-branch[git branch --delete-merged] honors the same setting.
 [#examples]
 == Examples
 
-Delete the branches merged into the current branch:
+Delete the branches merged into the default branch of origin:
 
 [source,console]
 ----
 $ git purge-branches
 ----
 
-After updating the current branch, list the branches merged into it, including those that the remote rebased before merging, then delete them:
+After fetching, list the branches merged into the default branch of origin, including those that the remote rebased before merging, then delete them:
 
 [source,console]
 ----
-$ git pull --prune
+$ git fetch --prune
 $ git purge-branches --dry-run --equivalent
 $ git purge-branches --equivalent
 ----
