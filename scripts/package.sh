@@ -64,6 +64,9 @@ if [[ -z ${version} ]]; then
     version="$("${root_dir}/scripts/version.sh" version)"
 fi
 
+# The installed script names the version of the package.
+export GIT_PURGE_BRANCHES_VERSION="${version}"
+
 # Debian versions start with a digit, and those of native packages, which have
 # no Debian revision, contain no hyphen.
 if [[ ${version} != [0-9]* ]]; then
@@ -189,7 +192,7 @@ function BuildPacman()
     local source="${staging}/pacman/${name}-${version}"
 
     CopySources "${source}"
-    RunLogged "${source}" env GIT_PURGE_BRANCHES_VERSION="${version}" PACKAGER="${maintainer}" \
+    RunLogged "${source}" env PACKAGER="${maintainer}" \
         PKGDEST="${output}" PKGEXT=.pkg.tar.zst BUILDDIR="${staging}/pacman/build" \
         SRCDEST="${staging}/pacman/sources" makepkg --nodeps -D pacman
 }

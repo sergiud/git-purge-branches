@@ -18,7 +18,7 @@ git-purge-branches - delete local branches merged into a commit
 
 [verse]
 *git purge-branches* [<<option-dry-run,*-n*>> | <<option-dry-run,*--dry-run*>>] [<<option-equivalent,*-e*>> | <<option-equivalent,*--equivalent*>>] [<<option-interactive,*-i*>> | <<option-interactive,*--interactive*>>] [<<argument-commit,_<commit>_>>]
-*git purge-branches* <<option-help,*-h*>> | <<option-help,*--help*>>
+*git purge-branches* <<option-help,*-h*>> | <<option-help,*--help*>> | <<option-version,*-v*>> | <<option-version,*--version*>>
 
 [#description]
 == Description
@@ -63,6 +63,9 @@ With <<option-dry-run,*--dry-run*>>, nothing is asked or deleted.
 
 [[option-help]]*-h*, *--help*::
 Print a usage summary and exit.
+
+[[option-version]]*-v*, *--version*::
+Print the version and exit.
 
 [[argument-commit]]_<commit>_::
 The commit the branches are merged into, by default `origin/HEAD`, or `HEAD` without it.

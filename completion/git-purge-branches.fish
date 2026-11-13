@@ -32,6 +32,11 @@ complete --command git-purge-branches \
     --condition 'not __fish_seen_argument --short h --long help' \
     --short-option h --long-option help \
     --description 'Show the help'
+complete --command git-purge-branches \
+    --condition 'not __fish_seen_argument --short h --long help' \
+    --condition 'not __fish_seen_argument --short v --long version' \
+    --short-option v --long-option version \
+    --description 'Show the version'
 
 # After --, __fish_git_refs takes -- for a global option of git and lists no
 # refs.

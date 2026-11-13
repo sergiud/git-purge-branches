@@ -11,6 +11,9 @@
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly ROOT_DIR
 readonly SCRIPT="${ROOT_DIR}/git-purge-branches"
+# The version of the checkout, which its script and the installed copies name
+CHECKOUT_VERSION="$("${ROOT_DIR}/scripts/version.sh" version)"
+readonly CHECKOUT_VERSION
 readonly COMPLETION="${ROOT_DIR}/completion/git-purge-branches.bash"
 readonly ZSH_COMPLETION="${ROOT_DIR}/completion/_git-purge-branches"
 readonly FISH_COMPLETION="${ROOT_DIR}/completion/git-purge-branches.fish"
@@ -710,6 +713,41 @@ function TestHelpPrintsUsage()
     fi
 }
 
+function TestPrintsVersion()
+{
+    RunPurge --version
+    ExpectStatus 0
+    ExpectStdout "git-purge-branches ${CHECKOUT_VERSION}"
+}
+
+function TestPrintsVersionWithShortOption()
+{
+    RunPurge -v
+    ExpectStatus 0
+    ExpectStdout "git-purge-branches ${CHECKOUT_VERSION}"
+}
+
+# The installed script names the version it was installed from without the
+# scripts of the checkout.
+function TestInstalledScriptPrintsVersion()
+{
+    RunJust install --prefix="${sandbox}/prefix"
+    ExpectStatus 0
+    (cd "${sandbox}" && "${sandbox}/prefix/${INSTALLED_SCRIPT}" --version) >"${sandbox}/stdout"
+    ExpectStdout "git-purge-branches ${CHECKOUT_VERSION}"
+}
+
+function TestPackagedScriptPrintsVersionOfPackage()
+{
+    local top="${sandbox}/git-purge-branches-${PACKAGE_VERSION}"
+
+    RunJust tarball --version="${PACKAGE_VERSION}" --output="${sandbox}/dist"
+    ExpectStatus 0
+    tar --extract --gzip --file="${sandbox}/dist/${TARBALL}" --directory="${sandbox}"
+    (cd "${sandbox}" && "${top}/${INSTALLED_SCRIPT}" --version) >"${sandbox}/stdout"
+    ExpectStdout "git-purge-branches ${PACKAGE_VERSION}"
+}
+
 function TestRejectsUnknownOption()
 {
     Git branch feature
@@ -986,11 +1024,25 @@ function ExpectNotInstalled()
     fi
 }
 
+# Writes the script with the given version stamped, as the install script
+# stamps it, and stores its path in stamped_script.
+function StampScript()
+{
+    local version="$1"
+
+    stamped_script="${sandbox}/stamped-git-purge-branches-${version}"
+    sed "s/^stamped_version=.*/stamped_version=${version}/" "${SCRIPT}" >"${stamped_script}"
+}
+
+# Expects the script with the given version stamped, that of the checkout by
+# default, and the manual page below the prefix.
 function ExpectScriptAndManPageInstalled()
 {
     local prefix="$1"
+    local version="${2:-${CHECKOUT_VERSION}}"
 
-    ExpectInstalledFile "${prefix}/${INSTALLED_SCRIPT}" 755 "${SCRIPT}"
+    StampScript "${version}"
+    ExpectInstalledFile "${prefix}/${INSTALLED_SCRIPT}" 755 "${stamped_script}"
     ExpectInstalledFile "${prefix}/${INSTALLED_MAN_PAGE}" 644 "${MAN_PAGE}"
 }
 
@@ -1336,7 +1388,8 @@ function TestDebContainsSources()
     dpkg-deb --extract "${sandbox}/dist/${DEB}" "${root}"
     gzip --decompress --keep "${root}/usr/share/man/man1/git-purge-branches.1.gz"
 
-    ExpectSameContents "${root}/usr/bin/git-purge-branches" "${SCRIPT}"
+    StampScript "${PACKAGE_VERSION}"
+    ExpectSameContents "${root}/usr/bin/git-purge-branches" "${stamped_script}"
     ExpectSameContents "${root}/usr/share/man/man1/git-purge-branches.1" "${MAN_PAGE}"
     ExpectSameContents "${root}/usr/share/bash-completion/completions/git-purge-branches" "${COMPLETION}"
     ExpectSameContents "${root}/usr/share/zsh/vendor-completions/_git-purge-branches" "${ZSH_COMPLETION}"
@@ -1367,7 +1420,8 @@ function TestTarballContainsSources()
     ExpectStatus 0
     tar --extract --gzip --file="${sandbox}/dist/${TARBALL}" --directory="${sandbox}"
 
-    ExpectSameContents "${top}/${INSTALLED_SCRIPT}" "${SCRIPT}"
+    StampScript "${PACKAGE_VERSION}"
+    ExpectSameContents "${top}/${INSTALLED_SCRIPT}" "${stamped_script}"
     ExpectSameContents "${top}/${INSTALLED_MAN_PAGE}" "${MAN_PAGE}"
     ExpectSameContents "${top}/${INSTALLED_COMPLETION}" "${COMPLETION}"
     ExpectSameContents "${top}/${INSTALLED_ZSH_COMPLETION}" "${ZSH_COMPLETION}"
@@ -1640,7 +1694,8 @@ function TestPacmanContainsSources()
     tar --extract --file="${sandbox}/dist/${PACMAN}" --directory="${root}"
     gzip --decompress --keep "${root}/usr/share/man/man1/git-purge-branches.1.gz"
 
-    ExpectSameContents "${root}/usr/bin/git-purge-branches" "${SCRIPT}"
+    StampScript "${PACKAGE_VERSION}"
+    ExpectSameContents "${root}/usr/bin/git-purge-branches" "${stamped_script}"
     ExpectSameContents "${root}/usr/share/man/man1/git-purge-branches.1" "${MAN_PAGE}"
     ExpectSameContents "${root}/usr/share/bash-completion/completions/git-purge-branches" "${COMPLETION}"
     ExpectSameContents "${root}/usr/share/zsh/site-functions/_git-purge-branches" "${ZSH_COMPLETION}"
@@ -1694,7 +1749,7 @@ function TestGetInstallsLatestRelease()
     FakeUserId 1000
     RunGet
     ExpectStatus 0
-    ExpectScriptAndManPageInstalled "${sandbox}/home/.local"
+    ExpectScriptAndManPageInstalled "${sandbox}/home/.local" "${PACKAGE_VERSION}"
     ExpectCompletionsInstalled "${sandbox}/home/.local"
 }
 
@@ -1704,7 +1759,7 @@ function TestGetInstallsGivenVersionBelowPrefix()
     StartReleaseServer v9.9.9 || return
     RunGet --version="${PACKAGE_VERSION}" --prefix="${sandbox}/prefix"
     ExpectStatus 0
-    ExpectScriptAndManPageInstalled "${sandbox}/prefix"
+    ExpectScriptAndManPageInstalled "${sandbox}/prefix" "${PACKAGE_VERSION}"
     ExpectCompletionsInstalled "${sandbox}/prefix"
 }
 
@@ -1796,7 +1851,7 @@ function TestGetInstallsWithBsdtar()
     ln -s "${bsdtar}" "${sandbox}/fake-bin/tar"
     RunGet --prefix="${sandbox}/prefix"
     ExpectStatus 0
-    ExpectScriptAndManPageInstalled "${sandbox}/prefix"
+    ExpectScriptAndManPageInstalled "${sandbox}/prefix" "${PACKAGE_VERSION}"
     ExpectCompletionsInstalled "${sandbox}/prefix"
     RunGet --prefix="${sandbox}/prefix" --uninstall
     ExpectStatus 0
@@ -1947,7 +2002,7 @@ function TestPagesLinkOptionsAndSections()
 
     # The options, the argument and the setting show a link to their anchor on
     # hover, as the sections do.
-    for anchor in option-dry-run option-equivalent option-interactive option-help argument-commit setting-keep setting-delete-merged; do
+    for anchor in option-dry-run option-equivalent option-interactive option-help option-version argument-commit setting-keep setting-delete-merged; do
         ExpectPageContains "<dt class=\"hdlist1\"><a id=\"${anchor}\"></a><a class=\"anchor\" href=\"#${anchor}\"></a>"
     done
 
@@ -2155,14 +2210,14 @@ function TestCompletesLongOptions()
 {
     Complete git purge-branches --
     ExpectStatus 0
-    ExpectStdout --dry-run --equivalent --help --interactive
+    ExpectStdout --dry-run --equivalent --help --interactive --version
 }
 
 function TestCompletesLongOptionsForDash()
 {
     Complete git purge-branches -
     ExpectStatus 0
-    ExpectStdout --dry-run --equivalent --help --interactive
+    ExpectStdout --dry-run --equivalent --help --interactive --version
 }
 
 function TestCompletesOptionWithPrefix()
@@ -2255,14 +2310,14 @@ function TestZshCompletesLongOptions()
 {
     CompleteZsh git purge-branches --
     ExpectStatus 0
-    ExpectStdout --dry-run --equivalent --help --interactive
+    ExpectStdout --dry-run --equivalent --help --interactive --version
 }
 
 function TestZshCompletesShortAndLongOptions()
 {
     CompleteZsh git purge-branches -
     ExpectStatus 0
-    ExpectStdout --dry-run --equivalent --help --interactive -e -h -i -n
+    ExpectStdout --dry-run --equivalent --help --interactive --version -e -h -i -n -v
 }
 
 function TestZshCompletesOptionWithPrefix()
@@ -2276,7 +2331,7 @@ function TestZshOmitsGivenOption()
 {
     CompleteZsh git purge-branches -n --
     ExpectStatus 0
-    ExpectStdout --equivalent --help --interactive
+    ExpectStdout --equivalent --help --interactive --version
 }
 
 function TestZshCompletesBranchAsCommit()
@@ -2391,7 +2446,7 @@ function TestFishCompletesLongOptions()
 {
     CompleteFish git purge-branches --
     ExpectStatus 0
-    ExpectStdout --dry-run --equivalent --help --interactive
+    ExpectStdout --dry-run --equivalent --help --interactive --version
 }
 
 function TestFishCompletesOptionWithPrefix()
@@ -2405,7 +2460,7 @@ function TestFishOmitsGivenOptions()
 {
     CompleteFish git purge-branches -n -e --
     ExpectStatus 0
-    ExpectStdout --help --interactive
+    ExpectStdout --help --interactive --version
 }
 
 function TestFishCompletesBranchAsCommit()
@@ -2540,6 +2595,10 @@ Run TestAcceptsBundledShortOptions
 Run TestAcceptsBundledShortOptionsInEitherOrder
 Run TestAcceptsOptionsAfterCommit
 Run TestHelpPrintsUsage
+Run TestPrintsVersion
+Run TestPrintsVersionWithShortOption
+Run TestInstalledScriptPrintsVersion
+Run TestPackagedScriptPrintsVersionOfPackage
 Run TestRejectsUnknownOption
 Run TestRejectsUnknownOptionInBundle
 Run TestRejectsSecondCommit

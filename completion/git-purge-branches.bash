@@ -15,7 +15,7 @@ _git_purge_branches()
 {
     # shellcheck disable=SC2154 # the completion of git sets cur
     if [[ ${cur} == -* ]] && ! __git_has_doubledash; then
-        __gitcomp "--dry-run --equivalent --help --interactive"
+        __gitcomp "--dry-run --equivalent --help --interactive --version"
         return
     fi
 

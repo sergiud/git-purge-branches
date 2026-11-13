@@ -9,10 +9,15 @@ set -euo pipefail
 # Status of a usage error, as for git and getopt
 readonly USAGE_ERROR=2
 
+# The version that the install script stamps into an installed copy. A checkout
+# leaves it empty and asks scripts/version.sh instead.
+stamped_version=
+
 function Usage()
 {
     cat <<USAGE
 usage: ${0##*/} [-n | --dry-run] [-e | --equivalent] [-i | --interactive] [<commit>]
+       ${0##*/} -h | --help | -v | --version
 
 Deletes the branches merged into <commit>, by default origin/HEAD or without
 it HEAD, except those
@@ -25,6 +30,7 @@ branch.<name>.deleteMerged set to false.
                     in <commit>, such as after a rebase on a remote
   -i, --interactive list the branches and ask before deleting them
   -h, --help        show this help
+  -v, --version     show the version
 USAGE
 }
 
@@ -46,6 +52,16 @@ while (($# > 0)); do
             ;;
         -h | --help)
             Usage
+            exit 0
+            ;;
+        -v | --version)
+            if [[ -n ${stamped_version} ]]; then
+                version="${stamped_version}"
+            else
+                version="$("$(dirname "${BASH_SOURCE[0]}")/scripts/version.sh" version)"
+            fi
+
+            echo "git-purge-branches ${version}"
             exit 0
             ;;
         --)

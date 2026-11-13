@@ -22,5 +22,6 @@ else
         '(-e --equivalent)'{-e,--equivalent}'[also delete branches whose commits all have an equivalent in the commit]' \
         '(-i --interactive)'{-i,--interactive}'[list the branches and ask before deleting them]' \
         '(- :)'{-h,--help}'[show the help]' \
+        '(- :)'{-v,--version}'[show the version]' \
         ':commit:__git_commits'
 fi

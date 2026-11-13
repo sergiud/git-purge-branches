@@ -109,11 +109,33 @@ for component in "${components[@]}"; do
     esac
 done
 
+# The script names the version it was installed from, which a package build
+# passes in GIT_PURGE_BRANCHES_VERSION and a checkout or an archive knows.
+staged_script="${root_dir}/git-purge-branches"
+
+if ((! uninstall)) && [[ " ${components[*]} " == *" script "* ]]; then
+    version="${GIT_PURGE_BRANCHES_VERSION:-}"
+
+    if [[ -z ${version} ]]; then
+        version="$("${root_dir}/scripts/version.sh" version)"
+    fi
+
+    staged_script="$(mktemp)"
+    trap 'rm -f -- "${staged_script}"' EXIT
+    sed "s/^stamped_version=.*/stamped_version=${version}/" "${root_dir}/git-purge-branches" >"${staged_script}"
+fi
+
 for index in "${!targets[@]}"; do
+    file="${sources[index]}"
+
+    if [[ ${file} == "${root_dir}/git-purge-branches" ]]; then
+        file="${staged_script}"
+    fi
+
     if ((uninstall)); then
         rm -f -- "${targets[index]}"
     else
         install -d "${targets[index]%/*}"
-        install -m "${modes[index]}" "${sources[index]}" "${targets[index]}"
+        install -m "${modes[index]}" "${file}" "${targets[index]}"
     fi
 done
