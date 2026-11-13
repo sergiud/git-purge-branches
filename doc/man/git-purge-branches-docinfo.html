@@ -41,7 +41,11 @@ the examples with the dark theme of Rouge. -->
   a { color: #58a6ff; }
   a:hover, a:focus { color: #79c0ff; }
   dt, strong, b { color: #e6edf3; }
-  code, pre, kbd { color: #c9d1d9; }
+  code, pre, kbd, .verseblock pre, blockquote, blockquote p,
+  .quoteblock blockquote, .quoteblock p, .paragraph.lead > p,
+  table tr th, table tr td, tbody tr th, tbody tr th p,
+  #content > h1:first-child:not([class]) { color: #c9d1d9; }
+  .admonitionblock > table td.content, .attribution cite, #footer-text { color: #8b949e; }
   :not(pre):not([class^=L]) > code, .literalblock pre, kbd { background: #161b22; }
   table, table thead, table tfoot, table tr.even, table tr.alt { background: #0d1117; }
   table, hr, kbd, #header > h1:only-child, .sect1 + .sect1,
@@ -168,9 +172,19 @@ the examples with the dark theme of Rouge. -->
 }
 </style>
 <meta name="manual-version" content="{revnumber}">
-<!-- Lists the versions of the published site of all releases below the title,
-which versions.json at the root of the site names. The page lies at the root
-or below its version. -->
+<!-- The selection of the version sits in the top left corner, opposite the
+corner that links to the project, and is as wide as its longest version. -->
+<style>
+select.manual-version {
+  position: absolute;
+  top: .5em;
+  left: .5em;
+  width: auto;
+}
+</style>
+<!-- Lists the versions of the published site of all releases in the top left
+corner, which versions.json at the root of the site names. The page lies at the
+root or below its version. -->
 <script>
 document.addEventListener("DOMContentLoaded", async () => {
   const version = document.querySelector('meta[name="manual-version"]').content;
@@ -192,6 +206,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   const select = document.createElement("select");
+  select.className = "manual-version";
   select.setAttribute("aria-label", "Version of the manual");
 
   for (const name of versions) {
@@ -202,6 +217,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     location.href = select.value;
   });
 
-  document.querySelector("#header h1").after(select);
+  document.body.prepend(select);
 });
 </script>

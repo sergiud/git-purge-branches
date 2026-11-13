@@ -1989,6 +1989,22 @@ function ExpectPageContains()
     fi
 }
 
+# Expects the HTML page to contain the given lines in a row, starting at the
+# first line that equals the first of them.
+function ExpectPageLines()
+{
+    local page="${sandbox}/site/index.html"
+    local expected
+    local actual
+
+    expected="$(printf '%s\n' "$@")"
+    actual="$(grep -xF -m 1 -A "$(($# - 1))" -- "$1" "${page}")" || true
+
+    if [[ ${actual} != "${expected}" ]]; then
+        Fail "expected the lines '${expected}' in '${page}', got '${actual}'"
+    fi
+}
+
 # Expects the manual page to contain the given troff markup.
 function ExpectManPageContains()
 {
@@ -2018,8 +2034,9 @@ function TestPagesHighlightExamples()
     ExpectPageContains 'git purge-branches <span class="nt">--dry-run</span>'
 }
 
-# The HTML page follows the color scheme of the browser, from the text and the
-# highlighted examples to the corner that links to the project.
+# The HTML page follows the color scheme of the browser, from the text, the
+# synopsis and the highlighted examples to the corner that links to the
+# project.
 function TestPagesFollowDarkColorScheme()
 {
     RunJust pages --output="${sandbox}/site"
@@ -2028,11 +2045,13 @@ function TestPagesFollowDarkColorScheme()
     ExpectPageContains 'color-scheme: light dark;'
     ExpectPageContains '.github-corner svg { fill: #f0f6fc !important; color: #0d1117 !important; }'
     ExpectPageContains '#header > h1:first-child { color: #e6edf3; }'
+    ExpectPageContains 'code, pre, kbd, .verseblock pre,'
     ExpectPageContains 'pre.rouge .nt {'
 }
 
 # The HTML page names the version of its sources, so that the switcher of
-# versions of the published site selects it.
+# versions of the published site selects it. The switcher sits in the top left
+# corner and is as wide as its longest version.
 function TestPagesNameVersion()
 {
     local version
@@ -2043,6 +2062,10 @@ function TestPagesNameVersion()
     ExpectPageContains "<meta name=\"manual-version\" content=\"${version}\">"
     ExpectPageContains "Version ${version}"
     ExpectPageContains "fetch(root + 'versions.json')"
+    ExpectPageContains 'select.className = "manual-version";'
+    ExpectPageContains 'document.body.prepend(select);'
+    ExpectPageLines 'select.manual-version {' '  position: absolute;' \
+        '  top: .5em;' '  left: .5em;' '  width: auto;' '}'
 }
 
 # The HTML page links back to the project on GitHub from its corner.
