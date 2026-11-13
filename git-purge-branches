@@ -20,7 +20,7 @@ checked out in any worktree, the branch given as <commit>, the default branches
 of the remotes, those matching a pattern of purge-branches.keep and those with
 branch.<name>.deleteMerged set to false.
 
-  -n, --dry-run     list the branches that would be deleted instead
+  -n, --dry-run     list the branches that would be deleted and why instead
   -e, --equivalent  also delete branches whose commits all have an equivalent
                     in <commit>, such as after a rebase on a remote
   -h, --help        show this help
@@ -223,9 +223,15 @@ if ((equivalent)); then
     done
 fi
 
+# A dry run prints each branch and the reason it would be deleted, separated by
+# a tab.
 if ((dry_run)); then
-    for branch in "${merged[@]}" "${equivalents[@]}"; do
-        echo "${branch}"
+    for branch in "${merged[@]}"; do
+        printf '%s\tmerged\n' "${branch}"
+    done
+
+    for branch in "${equivalents[@]}"; do
+        printf '%s\tequivalent\n' "${branch}"
     done
 
     exit 0

@@ -508,7 +508,7 @@ function TestPrintsNoRestoreHintWithoutDeletedBranches()
     Git branch feature
     RunPurge --dry-run
     ExpectStatus 0
-    ExpectStdout feature
+    ExpectStdout $'feature\tmerged'
     CreateUnmergedBranch topic
     RunPurge feature
     ExpectStatus 0
@@ -552,17 +552,19 @@ function TestDryRunDefaultsToDefaultBranchOfOrigin()
     CreateBranchMergedIntoOrigin
     RunPurge --dry-run
     ExpectStatus 0
-    ExpectStdout feature
+    ExpectStdout $'feature\tmerged'
     ExpectBranches feature master
 }
 
+# A dry run prints each branch and the reason it would be deleted, separated
+# by a tab.
 function TestDryRunListsMergedBranches()
 {
     Git branch feature
     Git branch other
     RunPurge --dry-run
     ExpectStatus 0
-    ExpectStdout feature other
+    ExpectStdout $'feature\tmerged' $'other\tmerged'
     ExpectBranches feature master other
 }
 
@@ -572,7 +574,7 @@ function TestDryRunListsRebasedBranchesWithEquivalent()
     CreateRebasedBranch rebased master
     RunPurge -n -e
     ExpectStatus 0
-    ExpectStdout merged rebased
+    ExpectStdout $'merged\tmerged' $'rebased\tequivalent'
     ExpectBranches master merged rebased
 }
 
@@ -582,7 +584,7 @@ function TestDryRunOmitsRebasedBranchesByDefault()
     CreateRebasedBranch rebased master
     RunPurge -n
     ExpectStatus 0
-    ExpectStdout merged
+    ExpectStdout $'merged\tmerged'
     ExpectBranches master merged rebased
 }
 
@@ -595,7 +597,7 @@ function ExpectBundledOptionsAccepted()
     CreateRebasedBranch rebased master
     RunPurge "${options}"
     ExpectStatus 0
-    ExpectStdout merged rebased
+    ExpectStdout $'merged\tmerged' $'rebased\tequivalent'
     ExpectBranches master merged rebased
 }
 
@@ -745,7 +747,7 @@ function TestDryRunOmitsProtectedBranches()
     Git config purge-branches.keep develop
     RunPurge --dry-run HEAD
     ExpectStatus 0
-    ExpectStdout merged
+    ExpectStdout $'merged\tmerged'
 }
 
 function TestDryRunOmitsExemptBranches()
@@ -757,7 +759,7 @@ function TestDryRunOmitsExemptBranches()
     Git config branch.rebased.deleteMerged false
     RunPurge --dry-run --equivalent
     ExpectStatus 0
-    ExpectStdout merged
+    ExpectStdout $'merged\tmerged'
     ExpectBranches exempt master merged rebased
 }
 
@@ -1889,7 +1891,7 @@ function TestManPageNamesReferencesWithoutLinks()
 
     ExpectManPageContains '\fBgit\-branch\fP(1), \fBgit\-cherry\fP(1), \fBgit\-for\-each\-ref\fP(1)'
     ExpectManPageContains 'with \fBgit branch \-d\fP, which refuses'
-    ExpectManPageContains 'With \fB\-\-equivalent\fP, the list'
+    ExpectManPageContains 'that \fB\-\-equivalent\fP selects'
     ExpectManPageContains 'as described under CONFIGURATION.'
 
     if grep -qE 'git-scm\.com|#(option|setting|configuration|description)' "${MAN_PAGE}"; then

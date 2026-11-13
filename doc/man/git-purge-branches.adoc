@@ -47,8 +47,8 @@ The local branch then keeps the original commits and is not merged.
 Short options may be combined, such as *-en* for *-e -n*.
 
 [[option-dry-run]]*-n*, *--dry-run*::
-List the branches that would be deleted, one name per line, and delete nothing.
-With <<option-equivalent,*--equivalent*>>, the list includes the branches it selects.
+List the branches that would be deleted and delete nothing.
+Each line holds the name of a branch and, after a tab, the reason: `merged`, or `equivalent` for a branch that <<option-equivalent,*--equivalent*>> selects.
 A merged branch that linkgit:git-branch[git branch -d] would refuse is listed as well.
 
 [[option-equivalent]]*-e*, *--equivalent*::
