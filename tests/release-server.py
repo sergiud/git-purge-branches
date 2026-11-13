@@ -7,8 +7,9 @@
 Usage: release-server.py <directory> <latest tag> <port file>
 
 GitHub redirects /releases/latest to the page of the latest release, whose URL
-ends in its tag. The server writes the port it listens on to the port file
-once it accepts connections.
+ends in its tag, or to the list of releases if all of them are prereleases,
+which an empty latest tag stands for. The server writes the port it listens on
+to the port file once it accepts connections.
 """
 
 import functools
@@ -26,7 +27,10 @@ class ReleaseHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/releases/latest":
             self.send_response(302)
-            self.send_header("Location", f"/releases/tag/{self.latest_tag}")
+            if self.latest_tag:
+                self.send_header("Location", f"/releases/tag/{self.latest_tag}")
+            else:
+                self.send_header("Location", "/releases")
             self.end_headers()
         else:
             super().do_GET()

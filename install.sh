@@ -73,14 +73,21 @@ if [[ ${prefix} != /* ]]; then
     exit "${USAGE_ERROR}"
 fi
 
-# GitHub redirects the latest release to its page, whose URL ends in its tag.
+# GitHub redirects the latest release to its page, whose URL ends in its tag,
+# or to the list of releases if all of them are prereleases.
 if [[ -z ${version} ]]; then
     if ! latest="$(curl -fsS -o /dev/null -w '%{redirect_url}' "${releases}/latest")" ||
         [[ -z ${latest} ]]; then
         echo "error: failed to find the latest release at ${releases}" >&2
         exit 1
     fi
-    version="${latest##*/v}"
+
+    if [[ ${latest} != */releases/tag/v* ]]; then
+        echo "error: found no release that is not a prerelease at ${releases}, which --version selects" >&2
+        exit 1
+    fi
+
+    version="${latest##*/releases/tag/v}"
 fi
 
 readonly tarball="${name}-${version}.tar.gz"

@@ -1473,6 +1473,17 @@ function TestGetRejectsTarballWithoutChecksum()
     ExpectNotInstalled "${sandbox}/prefix"
 }
 
+# GitHub redirects the latest release to the list of releases if all of them
+# are prereleases.
+function TestGetReportsMissingLatestRelease()
+{
+    StartReleaseServer "" || return
+    RunGet --prefix="${sandbox}/prefix"
+    ExpectStatus 1
+    ExpectStderrContains "error: found no release that is not a prerelease at ${releases}, which --version selects"
+    ExpectNotInstalled "${sandbox}/prefix"
+}
+
 function TestGetReportsMissingRelease()
 {
     StartReleaseServer "v${PACKAGE_VERSION}" || return
@@ -2304,6 +2315,7 @@ Run TestGetInstallsGivenVersionBelowPrefix
 Run TestGetDefaultsToUsrLocalWithRoot
 Run TestGetRejectsTamperedTarball
 Run TestGetRejectsTarballWithoutChecksum
+Run TestGetReportsMissingLatestRelease
 Run TestGetReportsMissingRelease
 Run TestGetUninstallsRelease
 Run TestGetInstallsWithBsdtar
