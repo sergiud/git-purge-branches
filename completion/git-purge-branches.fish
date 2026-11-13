@@ -25,6 +25,11 @@ complete --command git-purge-branches \
     --description 'Also delete branches whose commits all have an equivalent in the commit'
 complete --command git-purge-branches \
     --condition 'not __fish_seen_argument --short h --long help' \
+    --condition 'not __fish_seen_argument --short i --long interactive' \
+    --short-option i --long-option interactive \
+    --description 'List the branches and ask before deleting them'
+complete --command git-purge-branches \
+    --condition 'not __fish_seen_argument --short h --long help' \
     --short-option h --long-option help \
     --description 'Show the help'
 

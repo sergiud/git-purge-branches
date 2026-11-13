@@ -12,7 +12,7 @@ readonly USAGE_ERROR=2
 function Usage()
 {
     cat <<USAGE
-usage: ${0##*/} [-n | --dry-run] [-e | --equivalent] [<commit>]
+usage: ${0##*/} [-n | --dry-run] [-e | --equivalent] [-i | --interactive] [<commit>]
 
 Deletes the branches merged into <commit>, by default origin/HEAD or without
 it HEAD, except those
@@ -23,12 +23,14 @@ branch.<name>.deleteMerged set to false.
   -n, --dry-run     list the branches that would be deleted and why instead
   -e, --equivalent  also delete branches whose commits all have an equivalent
                     in <commit>, such as after a rebase on a remote
+  -i, --interactive list the branches and ask before deleting them
   -h, --help        show this help
 USAGE
 }
 
 declare -i dry_run=0
 declare -i equivalent=0
+declare -i interactive=0
 positional=()
 
 while (($# > 0)); do
@@ -38,6 +40,9 @@ while (($# > 0)); do
             ;;
         -e | --equivalent)
             equivalent=1
+            ;;
+        -i | --interactive)
+            interactive=1
             ;;
         -h | --help)
             Usage
@@ -223,9 +228,11 @@ if ((equivalent)); then
     done
 fi
 
-# A dry run prints each branch and the reason it would be deleted, separated by
-# a tab.
-if ((dry_run)); then
+# Prints each branch to delete and the reason, separated by a tab.
+function PrintCandidates()
+{
+    local branch
+
     for branch in "${merged[@]}"; do
         printf '%s\tmerged\n' "${branch}"
     done
@@ -233,8 +240,23 @@ if ((dry_run)); then
     for branch in "${equivalents[@]}"; do
         printf '%s\tequivalent\n' "${branch}"
     done
+}
 
+if ((dry_run)); then
+    PrintCandidates
     exit 0
+fi
+
+# An interactive run deletes the listed branches only if the user answers yes.
+if ((interactive && ${#merged[@]} + ${#equivalents[@]} != 0)); then
+    PrintCandidates
+    printf 'Delete these branches? [y/N] ' >&2
+    answer=
+    read -r answer || true
+
+    if [[ ${answer,,} != y && ${answer,,} != yes ]]; then
+        exit 0
+    fi
 fi
 
 # The commit of each branch, which restores a deleted branch

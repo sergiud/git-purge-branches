@@ -17,7 +17,7 @@ git-purge-branches - delete local branches merged into a commit
 == Synopsis
 
 [verse]
-*git purge-branches* [<<option-dry-run,*-n*>> | <<option-dry-run,*--dry-run*>>] [<<option-equivalent,*-e*>> | <<option-equivalent,*--equivalent*>>] [<<argument-commit,_<commit>_>>]
+*git purge-branches* [<<option-dry-run,*-n*>> | <<option-dry-run,*--dry-run*>>] [<<option-equivalent,*-e*>> | <<option-equivalent,*--equivalent*>>] [<<option-interactive,*-i*>> | <<option-interactive,*--interactive*>>] [<<argument-commit,_<commit>_>>]
 *git purge-branches* <<option-help,*-h*>> | <<option-help,*--help*>>
 
 [#description]
@@ -55,6 +55,11 @@ A merged branch that linkgit:git-branch[git branch -d] would refuse is listed as
 Also delete branches whose commits all have an equivalent in _<commit>_, as linkgit:git-cherry[git cherry] determines by comparing the changes of commits.
 A branch that contains an empty commit or a merge commit is kept, since linkgit:git-cherry[git cherry] matches an empty commit with any other and omits merge commits, whose own changes it cannot compare.
 These branches are deleted with linkgit:git-branch[git branch -D], which discards the original commits.
+
+[[option-interactive]]*-i*, *--interactive*::
+List the branches to delete as <<option-dry-run,*--dry-run*>> does and ask once before deleting them.
+Only the answer `y` or `yes`, in any case, deletes them, while any other answer or none keeps every branch.
+With <<option-dry-run,*--dry-run*>>, nothing is asked or deleted.
 
 [[option-help]]*-h*, *--help*::
 Print a usage summary and exit.

@@ -79,10 +79,16 @@ function TearDown()
 function RunPurgeIn()
 {
     local directory="$1"
+    local input=/dev/null
     shift
 
+    # The answers to a prompt, which a test writes to the file stdin, or none.
+    if [[ -f ${sandbox}/stdin ]]; then
+        input="${sandbox}/stdin"
+    fi
+
     (cd "${directory}" && timeout "${HANG_TIMEOUT}" /bin/bash "${SCRIPT}" "$@") \
-        >"${sandbox}/stdout" 2>"${sandbox}/stderr"
+        <"${input}" >"${sandbox}/stdout" 2>"${sandbox}/stderr"
     status=$?
 }
 
@@ -554,6 +560,78 @@ function TestDryRunDefaultsToDefaultBranchOfOrigin()
     ExpectStatus 0
     ExpectStdout $'feature\tmerged'
     ExpectBranches feature master
+}
+
+# Writes the given answer to the prompt of the script to its standard input.
+function Answer()
+{
+    printf '%s\n' "$1" >"${sandbox}/stdin"
+}
+
+function TestInteractiveDeletesAfterYes()
+{
+    Git branch feature
+    Answer y
+    RunPurge --interactive
+    ExpectStatus 0
+    ExpectStdoutContains $'feature\tmerged'
+    ExpectStderrContains "Delete these branches? [y/N] "
+    ExpectBranches master
+}
+
+function TestInteractiveAcceptsYesInAnyCase()
+{
+    Git branch feature
+    Answer YES
+    RunPurge -i
+    ExpectStatus 0
+    ExpectBranches master
+}
+
+function TestInteractiveKeepsBranchesAfterNo()
+{
+    Git branch feature
+    Answer n
+    RunPurge --interactive
+    ExpectStatus 0
+    ExpectStdout $'feature\tmerged'
+    ExpectBranches feature master
+}
+
+function TestInteractiveKeepsBranchesWithoutAnswer()
+{
+    Git branch feature
+    RunPurge --interactive
+    ExpectStatus 0
+    ExpectBranches feature master
+}
+
+function TestInteractiveAsksNothingWithoutBranches()
+{
+    CreateUnmergedBranch topic
+    Answer y
+    RunPurge --interactive
+    ExpectStatus 0
+    ExpectStdout ""
+
+    if [[ -s ${sandbox}/stderr ]]; then
+        Fail "expected no prompt, got '$(<"${sandbox}/stderr")'"
+    fi
+}
+
+# A dry run deletes nothing and therefore asks nothing.
+function TestInteractiveDryRunAsksNothing()
+{
+    Git branch feature
+    Answer y
+    RunPurge -ni
+    ExpectStatus 0
+    ExpectStdout $'feature\tmerged'
+    ExpectBranches feature master
+
+    if [[ -s ${sandbox}/stderr ]]; then
+        Fail "expected no prompt, got '$(<"${sandbox}/stderr")'"
+    fi
 }
 
 # A dry run prints each branch and the reason it would be deleted, separated
@@ -1869,7 +1947,7 @@ function TestPagesLinkOptionsAndSections()
 
     # The options, the argument and the setting show a link to their anchor on
     # hover, as the sections do.
-    for anchor in option-dry-run option-equivalent option-help argument-commit setting-keep setting-delete-merged; do
+    for anchor in option-dry-run option-equivalent option-interactive option-help argument-commit setting-keep setting-delete-merged; do
         ExpectPageContains "<dt class=\"hdlist1\"><a id=\"${anchor}\"></a><a class=\"anchor\" href=\"#${anchor}\"></a>"
     done
 
@@ -2077,14 +2155,14 @@ function TestCompletesLongOptions()
 {
     Complete git purge-branches --
     ExpectStatus 0
-    ExpectStdout --dry-run --equivalent --help
+    ExpectStdout --dry-run --equivalent --help --interactive
 }
 
 function TestCompletesLongOptionsForDash()
 {
     Complete git purge-branches -
     ExpectStatus 0
-    ExpectStdout --dry-run --equivalent --help
+    ExpectStdout --dry-run --equivalent --help --interactive
 }
 
 function TestCompletesOptionWithPrefix()
@@ -2177,14 +2255,14 @@ function TestZshCompletesLongOptions()
 {
     CompleteZsh git purge-branches --
     ExpectStatus 0
-    ExpectStdout --dry-run --equivalent --help
+    ExpectStdout --dry-run --equivalent --help --interactive
 }
 
 function TestZshCompletesShortAndLongOptions()
 {
     CompleteZsh git purge-branches -
     ExpectStatus 0
-    ExpectStdout --dry-run --equivalent --help -e -h -n
+    ExpectStdout --dry-run --equivalent --help --interactive -e -h -i -n
 }
 
 function TestZshCompletesOptionWithPrefix()
@@ -2198,7 +2276,7 @@ function TestZshOmitsGivenOption()
 {
     CompleteZsh git purge-branches -n --
     ExpectStatus 0
-    ExpectStdout --equivalent --help
+    ExpectStdout --equivalent --help --interactive
 }
 
 function TestZshCompletesBranchAsCommit()
@@ -2313,7 +2391,7 @@ function TestFishCompletesLongOptions()
 {
     CompleteFish git purge-branches --
     ExpectStatus 0
-    ExpectStdout --dry-run --equivalent --help
+    ExpectStdout --dry-run --equivalent --help --interactive
 }
 
 function TestFishCompletesOptionWithPrefix()
@@ -2327,7 +2405,7 @@ function TestFishOmitsGivenOptions()
 {
     CompleteFish git purge-branches -n -e --
     ExpectStatus 0
-    ExpectStdout --help
+    ExpectStdout --help --interactive
 }
 
 function TestFishCompletesBranchAsCommit()
@@ -2449,6 +2527,12 @@ Run TestPrintsNoRestoreHintWithoutDeletedBranches
 Run TestDefaultsToDefaultBranchOfOrigin
 Run TestGivenCommitOverridesDefaultBranchOfOrigin
 Run TestDryRunDefaultsToDefaultBranchOfOrigin
+Run TestInteractiveDeletesAfterYes
+Run TestInteractiveAcceptsYesInAnyCase
+Run TestInteractiveKeepsBranchesAfterNo
+Run TestInteractiveKeepsBranchesWithoutAnswer
+Run TestInteractiveAsksNothingWithoutBranches
+Run TestInteractiveDryRunAsksNothing
 Run TestDryRunListsMergedBranches
 Run TestDryRunListsRebasedBranchesWithEquivalent
 Run TestDryRunOmitsRebasedBranchesByDefault
