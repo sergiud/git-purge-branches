@@ -185,6 +185,27 @@ fi
 
 readarray -t keep_patterns <<<"${keep}"
 
+# The branches that set branch.<name>.deleteMerged, which a single call of git
+# config finds, so that only these need a call each to read the boolean. git
+# config fails with 1 if no branch sets it.
+declare -A configures_delete_merged
+declare -i delete_merged_status=0
+delete_merged_keys="$(git config --name-only --get-regexp '^branch\..*\.deletemerged$')" ||
+    delete_merged_status=$?
+
+if ((delete_merged_status > 1)); then
+    exit "${delete_merged_status}"
+fi
+
+readarray -t delete_merged_keys <<<"${delete_merged_keys}"
+
+for key in "${delete_merged_keys[@]}"; do
+    if [[ -n ${key} ]]; then
+        key="${key#branch.}"
+        configures_delete_merged["${key%.*}"]=1
+    fi
+done
+
 # Succeeds if the given name matches any of the remaining glob patterns as a
 # whole, where * also matches slashes.
 function MatchesAny()
@@ -288,8 +309,12 @@ function ListBranches()
             continue
         fi
 
-        delete_merged="$(git config --type=bool --default=true \
-            --get "branch.${ref#refs/heads/}.deleteMerged")"
+        delete_merged=true
+
+        if [[ -n ${configures_delete_merged["${name}"]:-} ]]; then
+            delete_merged="$(git config --type=bool --default=true \
+                --get "branch.${name}.deleteMerged")"
+        fi
 
         if [[ ${delete_merged} == true ]]; then
             kept+=("${ref}")
