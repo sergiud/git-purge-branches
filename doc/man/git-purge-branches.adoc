@@ -17,7 +17,7 @@ git-purge-branches - delete local branches merged into a commit
 == Synopsis
 
 [verse]
-*git purge-branches* [<<option-dry-run,*-n*>> | <<option-dry-run,*--dry-run*>>] [<<option-equivalent,*-e*>> | <<option-equivalent,*--equivalent*>>] [<<option-interactive,*-i*>> | <<option-interactive,*--interactive*>>] [<<argument-commit,_<commit>_>>]
+*git purge-branches* [<<option-dry-run,*-n*>> | <<option-dry-run,*--dry-run*>>] [<<option-equivalent,*-e*>> | <<option-equivalent,*--equivalent*>>] [<<option-interactive,*-i*>> | <<option-interactive,*--interactive*>>] [<<option-include,*--include*>>=_<pattern>_]... [<<option-exclude,*--exclude*>>=_<pattern>_]... [<<option-older-than,*--older-than*>>=_<days>_] [<<argument-commit,_<commit>_>>]
 *git purge-branches* <<option-help,*-h*>> | <<option-help,*--help*>> | <<option-version,*-v*>> | <<option-version,*--version*>>
 
 [#description]
@@ -60,6 +60,19 @@ These branches are deleted with linkgit:git-branch[git branch -D], which discard
 List the branches to delete as <<option-dry-run,*--dry-run*>> does and ask once before deleting them.
 Only the answer `y` or `yes`, in any case, deletes them, while any other answer or none keeps every branch.
 With <<option-dry-run,*--dry-run*>>, nothing is asked or deleted.
+
+[[option-include]]*--include*=_<pattern>_::
+Delete only the branches that match the glob pattern, which matches the whole name of a branch, as for <<setting-keep,*purge-branches.keep*>>.
+The option may be given several times, and a branch then needs to match one of the patterns.
+
+[[option-exclude]]*--exclude*=_<pattern>_::
+Keep the branches that match the glob pattern, even if they match <<option-include,*--include*>>.
+The option may be given several times.
+
+[[option-older-than]]*--older-than*=_<days>_::
+Delete only the branches whose last commit is older than the given whole number of days, such as `30`.
+
+The value of these options may also follow as the next argument, such as *--include* `+'feature/*'+`.
 
 [[option-help]]*-h*, *--help*::
 Print a usage summary and exit.

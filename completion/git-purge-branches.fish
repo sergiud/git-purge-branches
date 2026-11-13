@@ -30,6 +30,19 @@ complete --command git-purge-branches \
     --description 'List the branches and ask before deleting them'
 complete --command git-purge-branches \
     --condition 'not __fish_seen_argument --short h --long help' \
+    --long-option include --require-parameter \
+    --description 'Delete only branches that match the glob pattern'
+complete --command git-purge-branches \
+    --condition 'not __fish_seen_argument --short h --long help' \
+    --long-option exclude --require-parameter \
+    --description 'Keep the branches that match the glob pattern'
+complete --command git-purge-branches \
+    --condition 'not __fish_seen_argument --short h --long help' \
+    --condition 'not __fish_seen_argument --long older-than' \
+    --long-option older-than --require-parameter \
+    --description 'Delete only branches whose last commit is older'
+complete --command git-purge-branches \
+    --condition 'not __fish_seen_argument --short h --long help' \
     --short-option h --long-option help \
     --description 'Show the help'
 complete --command git-purge-branches \

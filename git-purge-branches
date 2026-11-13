@@ -8,6 +8,7 @@ set -euo pipefail
 
 # Status of a usage error, as for git and getopt
 readonly USAGE_ERROR=2
+readonly SECONDS_PER_DAY=86400
 
 # The version that the install script stamps into an installed copy. A checkout
 # leaves it empty and asks scripts/version.sh instead.
@@ -16,7 +17,9 @@ stamped_version=
 function Usage()
 {
     cat <<USAGE
-usage: ${0##*/} [-n | --dry-run] [-e | --equivalent] [-i | --interactive] [<commit>]
+usage: ${0##*/} [-n | --dry-run] [-e | --equivalent] [-i | --interactive]
+       [--include=<pattern>]... [--exclude=<pattern>]... [--older-than=<days>]
+       [<commit>]
        ${0##*/} -h | --help | -v | --version
 
 Deletes the branches merged into <commit>, by default origin/HEAD or without
@@ -29,14 +32,34 @@ branch.<name>.deleteMerged set to false.
   -e, --equivalent  also delete branches whose commits all have an equivalent
                     in <commit>, such as after a rebase on a remote
   -i, --interactive list the branches and ask before deleting them
+  --include=<pattern>
+                    delete only branches that match the glob pattern
+  --exclude=<pattern>
+                    keep the branches that match the glob pattern
+  --older-than=<days>
+                    delete only branches whose last commit is older
   -h, --help        show this help
   -v, --version     show the version
 USAGE
 }
 
+# Exits with a usage error unless the option given first has a value after it.
+function RequireValue()
+{
+    if (($# < 2)); then
+        echo "error: expected a value of $1" >&2
+        Usage >&2
+        exit "${USAGE_ERROR}"
+    fi
+}
+
 declare -i dry_run=0
 declare -i equivalent=0
 declare -i interactive=0
+include_patterns=()
+exclude_patterns=()
+older_than=
+declare -i older_than_given=0
 positional=()
 
 while (($# > 0)); do
@@ -49,6 +72,26 @@ while (($# > 0)); do
             ;;
         -i | --interactive)
             interactive=1
+            ;;
+        --include=* | --exclude=* | --older-than=*)
+            set -- "${1%%=*}" "${1#*=}" "${@:2}"
+            continue
+            ;;
+        --include)
+            RequireValue "$@"
+            include_patterns+=("$2")
+            shift
+            ;;
+        --exclude)
+            RequireValue "$@"
+            exclude_patterns+=("$2")
+            shift
+            ;;
+        --older-than)
+            RequireValue "$@"
+            older_than="$2"
+            older_than_given=1
+            shift
             ;;
         -h | --help)
             Usage
@@ -86,6 +129,21 @@ while (($# > 0)); do
     esac
     shift
 done
+
+# With --older-than, branches whose tip is newer than this time in seconds since
+# the epoch are kept.
+declare -i newest=0
+
+if ((older_than_given)); then
+    if [[ ! ${older_than} =~ ^[0-9]+$ ]]; then
+        echo "error: expected a number of days for --older-than, got '${older_than}'" >&2
+        Usage >&2
+        exit "${USAGE_ERROR}"
+    fi
+
+    now="$(date +%s)"
+    newest=$((now - older_than * SECONDS_PER_DAY))
+fi
 
 if ((${#positional[@]} > 1)); then
     echo "error: expected at most 1 commit, got ${#positional[@]}" >&2
@@ -127,21 +185,15 @@ fi
 
 readarray -t keep_patterns <<<"${keep}"
 
-# Succeeds if the branch of the given name is a default branch of a remote or
-# matches a pattern of purge-branches.keep.
-function IsProtected()
+# Succeeds if the given name matches any of the remaining glob patterns as a
+# whole, where * also matches slashes.
+function MatchesAny()
 {
     local name="$1"
-    local branch
     local pattern
+    shift
 
-    for branch in "${default_branches[@]}"; do
-        if [[ -n ${branch} && ${name} == "${branch}" ]]; then
-            return 0
-        fi
-    done
-
-    for pattern in "${keep_patterns[@]}"; do
+    for pattern in "$@"; do
         # shellcheck disable=SC2053 # the pattern is a glob
         if [[ -n ${pattern} && ${name} == ${pattern} ]]; then
             return 0
@@ -149,6 +201,42 @@ function IsProtected()
     done
 
     return 1
+}
+
+# Succeeds if the branch of the given name is a default branch of a remote or
+# matches a pattern of purge-branches.keep.
+function IsProtected()
+{
+    local name="$1"
+    local branch
+
+    for branch in "${default_branches[@]}"; do
+        if [[ -n ${branch} && ${name} == "${branch}" ]]; then
+            return 0
+        fi
+    done
+
+    MatchesAny "${name}" "${keep_patterns[@]}"
+}
+
+# Succeeds if the branch of the given name, whose tip has the given committer
+# date, passes the filters of --include, --exclude and --older-than.
+function IsSelected()
+{
+    local name="$1"
+    local -i date="$2"
+
+    # shellcheck disable=SC2310 # the function only compares and returns
+    if ((${#include_patterns[@]} != 0)) && ! MatchesAny "${name}" "${include_patterns[@]}"; then
+        return 1
+    fi
+
+    # shellcheck disable=SC2310 # the function only compares and returns
+    if MatchesAny "${name}" "${exclude_patterns[@]}"; then
+        return 1
+    fi
+
+    ((! older_than_given || date < newest))
 }
 
 # Stores in the array listed the full ref names of the branches that the
@@ -164,13 +252,17 @@ function ListBranches()
     local -i fd
     local -i pid
     local -i status=0
+    local entry
     local ref
+    local name
+    local -i date
     local delete_merged
     local kept=()
 
+    # Each entry holds the full ref name and the committer date of the tip.
     # shellcheck disable=SC2312 # wait reports the status of the substitution
     exec {fd}< <(git for-each-ref "${filter}" --omit-empty \
-        --format='%(if)%(worktreepath)%(then)%(else)%(refname)%(end)' \
+        --format='%(if)%(worktreepath)%(then)%(else)%(refname) %(committerdate:unix)%(end)' \
         refs/heads/)
     pid=$!
 
@@ -186,9 +278,13 @@ function ListBranches()
 
     # git config reports a value that is not a boolean and fails, which ends
     # the script before any branch is deleted.
-    for ref in "${listed[@]}"; do
+    for entry in "${listed[@]}"; do
+        ref="${entry% *}"
+        date="${entry##* }"
+        name="${ref#refs/heads/}"
+
         # shellcheck disable=SC2310 # the function only compares and returns
-        if IsProtected "${ref#refs/heads/}"; then
+        if IsProtected "${name}" || ! IsSelected "${name}" "${date}"; then
             continue
         fi
 

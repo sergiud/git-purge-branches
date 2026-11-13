@@ -637,6 +637,102 @@ function TestInteractiveDryRunAsksNothing()
     fi
 }
 
+# Creates the merged branch of the given name at a new commit of the given
+# committer date.
+function CreateMergedBranchOfDate()
+{
+    local name="$1"
+    local date="$2"
+
+    env GIT_COMMITTER_DATE="${date}" git -C "${repo}" commit -q --allow-empty -m "${name}"
+    Git branch "${name}"
+}
+
+function TestIncludeSelectsMatchingBranches()
+{
+    Git branch feature/a
+    Git branch feature/b
+    Git branch other
+    RunPurge --include='feature/*'
+    ExpectStatus 0
+    ExpectBranches master other
+}
+
+function TestIncludeAcceptsSeveralPatternsAndSeparateValues()
+{
+    Git branch feature/a
+    Git branch fix/b
+    Git branch other
+    RunPurge --include 'feature/*' --include='fix/*'
+    ExpectStatus 0
+    ExpectBranches master other
+}
+
+function TestExcludeKeepsMatchingBranches()
+{
+    Git branch feature/a
+    Git branch feature/b
+    Git branch other
+    RunPurge --exclude='feature/*'
+    ExpectStatus 0
+    ExpectBranches feature/a feature/b master
+}
+
+function TestExcludeOverridesInclude()
+{
+    Git branch feature/a
+    Git branch feature/b
+    RunPurge --include='feature/*' --exclude=feature/b
+    ExpectStatus 0
+    ExpectBranches feature/b master
+}
+
+function TestOlderThanKeepsRecentBranches()
+{
+    local now
+
+    now="$(date +%s)"
+    CreateMergedBranchOfDate old 2020-01-01T00:00:00
+    CreateMergedBranchOfDate week "$((now - 7 * 86400)) +0000"
+    CreateMergedBranchOfDate recent "${now} +0000"
+    RunPurge --older-than=30
+    ExpectStatus 0
+    ExpectBranches master recent week
+}
+
+function TestFiltersApplyToEquivalentBranches()
+{
+    CreateRebasedBranch feature master
+    CreateRebasedBranch other master
+    RunPurge --equivalent --include=feature
+    ExpectStatus 0
+    ExpectBranches master other
+}
+
+function TestRejectsMissingFilterValue()
+{
+    local option
+
+    for option in --include --exclude --older-than; do
+        RunPurge "${option}"
+        ExpectStatus "${USAGE_ERROR}"
+        ExpectStderrContains "error: expected a value of ${option}"
+    done
+}
+
+function TestRejectsOlderThanWithoutNumberOfDays()
+{
+    local value
+
+    for value in 30.days ""; do
+        Git branch -f feature
+        RunPurge --older-than="${value}"
+        ExpectStatus "${USAGE_ERROR}"
+        ExpectStderrContains "error: expected a number of days for --older-than, got '${value}'"
+        ExpectBranches feature master
+    done
+}
+
 # A dry run prints each branch and the reason it would be deleted, separated
 # by a tab.
 function TestDryRunListsMergedBranches()
@@ -2002,7 +2098,7 @@ function TestPagesLinkOptionsAndSections()
 
     # The options, the argument and the setting show a link to their anchor on
     # hover, as the sections do.
-    for anchor in option-dry-run option-equivalent option-interactive option-help option-version argument-commit setting-keep setting-delete-merged; do
+    for anchor in option-dry-run option-equivalent option-interactive option-include option-exclude option-older-than option-help option-version argument-commit setting-keep setting-delete-merged; do
         ExpectPageContains "<dt class=\"hdlist1\"><a id=\"${anchor}\"></a><a class=\"anchor\" href=\"#${anchor}\"></a>"
     done
 
@@ -2210,19 +2306,19 @@ function TestCompletesLongOptions()
 {
     Complete git purge-branches --
     ExpectStatus 0
-    ExpectStdout --dry-run --equivalent --help --interactive --version
+    ExpectStdout --dry-run --equivalent --exclude= --help --include= --interactive --older-than= --version
 }
 
 function TestCompletesLongOptionsForDash()
 {
     Complete git purge-branches -
     ExpectStatus 0
-    ExpectStdout --dry-run --equivalent --help --interactive --version
+    ExpectStdout --dry-run --equivalent --exclude= --help --include= --interactive --older-than= --version
 }
 
 function TestCompletesOptionWithPrefix()
 {
-    Complete git purge-branches --e
+    Complete git purge-branches --eq
     ExpectStatus 0
     ExpectStdout --equivalent
 }
@@ -2268,7 +2364,7 @@ function TestCompletesNoOptionAfterDoubleDash()
 
 function TestCompletesOptionOfStandaloneCommand()
 {
-    Complete git-purge-branches --e
+    Complete git-purge-branches --eq
     ExpectStatus 0
     ExpectStdout --equivalent
 }
@@ -2310,19 +2406,19 @@ function TestZshCompletesLongOptions()
 {
     CompleteZsh git purge-branches --
     ExpectStatus 0
-    ExpectStdout --dry-run --equivalent --help --interactive --version
+    ExpectStdout --dry-run --equivalent --exclude --help --include --interactive --older-than --version
 }
 
 function TestZshCompletesShortAndLongOptions()
 {
     CompleteZsh git purge-branches -
     ExpectStatus 0
-    ExpectStdout --dry-run --equivalent --help --interactive --version -e -h -i -n -v
+    ExpectStdout --dry-run --equivalent --exclude --help --include --interactive --older-than --version -e -h -i -n -v
 }
 
 function TestZshCompletesOptionWithPrefix()
 {
-    CompleteZsh git purge-branches --e
+    CompleteZsh git purge-branches --eq
     ExpectStatus 0
     ExpectStdout --equivalent
 }
@@ -2331,7 +2427,7 @@ function TestZshOmitsGivenOption()
 {
     CompleteZsh git purge-branches -n --
     ExpectStatus 0
-    ExpectStdout --equivalent --help --interactive --version
+    ExpectStdout --equivalent --exclude --help --include --interactive --older-than --version
 }
 
 function TestZshCompletesBranchAsCommit()
@@ -2386,7 +2482,7 @@ function TestZshCompletesNothingAfterHelp()
 
 function TestZshCompletesOptionOfStandaloneCommand()
 {
-    CompleteZsh git-purge-branches --e
+    CompleteZsh git-purge-branches --eq
     ExpectStatus 0
     ExpectStdout --equivalent
 }
@@ -2446,12 +2542,12 @@ function TestFishCompletesLongOptions()
 {
     CompleteFish git purge-branches --
     ExpectStatus 0
-    ExpectStdout --dry-run --equivalent --help --interactive --version
+    ExpectStdout --dry-run --equivalent --exclude --help --include --interactive --older-than --version
 }
 
 function TestFishCompletesOptionWithPrefix()
 {
-    CompleteFish git purge-branches --e
+    CompleteFish git purge-branches --eq
     ExpectStatus 0
     ExpectStdout --equivalent
 }
@@ -2460,7 +2556,7 @@ function TestFishOmitsGivenOptions()
 {
     CompleteFish git purge-branches -n -e --
     ExpectStatus 0
-    ExpectStdout --help --interactive --version
+    ExpectStdout --exclude --help --include --interactive --older-than --version
 }
 
 function TestFishCompletesBranchAsCommit()
@@ -2518,7 +2614,7 @@ function TestFishCompletesNothingAfterHelp()
 
 function TestFishCompletesOptionOfStandaloneCommand()
 {
-    CompleteFish git-purge-branches --e
+    CompleteFish git-purge-branches --eq
     ExpectStatus 0
     ExpectStdout --equivalent
 }
@@ -2588,6 +2684,14 @@ Run TestInteractiveKeepsBranchesAfterNo
 Run TestInteractiveKeepsBranchesWithoutAnswer
 Run TestInteractiveAsksNothingWithoutBranches
 Run TestInteractiveDryRunAsksNothing
+Run TestIncludeSelectsMatchingBranches
+Run TestIncludeAcceptsSeveralPatternsAndSeparateValues
+Run TestExcludeKeepsMatchingBranches
+Run TestExcludeOverridesInclude
+Run TestOlderThanKeepsRecentBranches
+Run TestFiltersApplyToEquivalentBranches
+Run TestRejectsMissingFilterValue
+Run TestRejectsOlderThanWithoutNumberOfDays
 Run TestDryRunListsMergedBranches
 Run TestDryRunListsRebasedBranchesWithEquivalent
 Run TestDryRunOmitsRebasedBranchesByDefault
