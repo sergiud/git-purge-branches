@@ -14,6 +14,12 @@ on:
 permissions:
   contents: read
 
+# shfmt formats differently from release to release, so the check uses the
+# release the scripts are formatted with instead of the one of Ubuntu.
+env:
+  SHFMT_VERSION: 3.14.1
+  SHFMT_SHA256: 76e77641faa025814b77f153b29796b8e6fa2fca03e0c76a691608b86c7ea7bf
+
 jobs:
   reuse:
     runs-on: ubuntu-26.04
@@ -28,13 +34,18 @@ jobs:
       fail-fast: false
       matrix:
         # Each check runs the recipe lint-<check> with the Ubuntu package of
-        # the same name.
+        # the same name, except shfmt.
         check: [shellcheck, shfmt, zsh, fish]
     steps:
       - run: sudo apt-get update
       - run: >-
           sudo apt-get install --yes --no-install-recommends pipx
-          ${{ matrix.check }}
+          ${{ matrix.check != 'shfmt' && matrix.check || '' }}
+      - if: matrix.check == 'shfmt'
+        run: |
+          curl -fsSL -o shfmt "https://github.com/mvdan/sh/releases/download/v${SHFMT_VERSION}/shfmt_v${SHFMT_VERSION}_linux_amd64"
+          echo "${SHFMT_SHA256}  shfmt" | sha256sum --check
+          sudo install shfmt /usr/local/bin/shfmt
       # The recipes take options, which just supports from 1.46, a release newer
       # than that of Ubuntu.
       - run: sudo pipx install --global rust-just==1.59.0

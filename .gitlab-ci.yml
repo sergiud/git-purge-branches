@@ -17,16 +17,29 @@ reuse:
 
 # Checks the scripts and completions with the linters and formatters of their
 # shells, each in a job of its own. Each check runs the recipe lint-<check>
-# with the Ubuntu package of the same name.
+# with the Ubuntu package of the same name, except shfmt, which formats
+# differently from release to release and therefore comes from the release
+# the scripts are formatted with.
 lint:
   stage: lint
   image: ubuntu:26.04
   parallel:
     matrix:
       - CHECK: [shellcheck, shfmt, zsh, fish]
+  variables:
+    SHFMT_VERSION: 3.14.1
+    SHFMT_SHA256: 76e77641faa025814b77f153b29796b8e6fa2fca03e0c76a691608b86c7ea7bf
   script:
     - apt-get update
-    - apt-get install --yes --no-install-recommends pipx "${CHECK}"
+    - |
+      if [ "${CHECK}" = shfmt ]; then
+          apt-get install --yes --no-install-recommends pipx ca-certificates curl
+          curl -fsSL -o /usr/local/bin/shfmt "https://github.com/mvdan/sh/releases/download/v${SHFMT_VERSION}/shfmt_v${SHFMT_VERSION}_linux_amd64"
+          echo "${SHFMT_SHA256}  /usr/local/bin/shfmt" | sha256sum --check
+          chmod +x /usr/local/bin/shfmt
+      else
+          apt-get install --yes --no-install-recommends pipx "${CHECK}"
+      fi
     # The recipes take options, which just supports from 1.46, a release newer
     # than that of Ubuntu.
     - pipx install --global rust-just==1.59.0
