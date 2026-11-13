@@ -15,7 +15,8 @@ function Usage()
 usage: ${0##*/} [-n | --dry-run] [-e | --equivalent] [<commit>]
 
 Deletes the branches merged into <commit>, HEAD by default, except those
-checked out in any worktree, the branch given as <commit> and those with
+checked out in any worktree, the branch given as <commit>, the default branches
+of the remotes, those matching a pattern of purge-branches.keep and those with
 branch.<name>.deleteMerged set to false.
 
   -n, --dry-run     list the branches that would be deleted instead
@@ -73,10 +74,58 @@ fi
 # Branches merged into this commit are deleted.
 commit="${positional[0]:-HEAD}"
 
+# The branches that the remotes name as their default, such as main for
+# origin/HEAD, which are always kept.
+declare -i list_status=0
+remote_defaults="$(git for-each-ref --format='%(symref:lstrip=3)' 'refs/remotes/*/HEAD')" ||
+    list_status=$?
+
+if ((list_status != 0)); then
+    echo "error: failed to list branches, git exited with status ${list_status}" >&2
+    exit "${list_status}"
+fi
+readarray -t default_branches <<<"${remote_defaults}"
+
+# The glob patterns of purge-branches.keep, whose matching branches are always
+# kept. git config fails with 1 if the setting is unset.
+declare -i keep_status=0
+keep="$(git config --get-all purge-branches.keep)" || keep_status=$?
+
+if ((keep_status > 1)); then
+    exit "${keep_status}"
+fi
+
+readarray -t keep_patterns <<<"${keep}"
+
+# Succeeds if the branch of the given name is a default branch of a remote or
+# matches a pattern of purge-branches.keep.
+function IsProtected()
+{
+    local name="$1"
+    local branch
+    local pattern
+
+    for branch in "${default_branches[@]}"; do
+        if [[ -n ${branch} && ${name} == "${branch}" ]]; then
+            return 0
+        fi
+    done
+
+    for pattern in "${keep_patterns[@]}"; do
+        # shellcheck disable=SC2053 # the pattern is a glob
+        if [[ -n ${pattern} && ${name} == ${pattern} ]]; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
 # Stores in the array listed the full ref names of the branches that the
 # for-each-ref filter given as the argument selects, except those checked out
-# in any worktree, which includes the current branch, and those exempt with
-# branch.<name>.deleteMerged set to false, as for git branch --delete-merged.
+# in any worktree, which includes the current branch, the protected ones, and
+# those exempt with branch.<name>.deleteMerged set to false, as for git branch
+# --delete-merged.
 # Unlike the output of git branch, the format is not affected by the user's
 # color or column configuration.
 function ListBranches()
@@ -108,6 +157,11 @@ function ListBranches()
     # git config reports a value that is not a boolean and fails, which ends
     # the script before any branch is deleted.
     for ref in "${listed[@]}"; do
+        # shellcheck disable=SC2310 # the function only compares and returns
+        if IsProtected "${ref#refs/heads/}"; then
+            continue
+        fi
+
         delete_merged="$(git config --type=bool --default=true \
             --get "branch.${ref#refs/heads/}.deleteMerged")"
 

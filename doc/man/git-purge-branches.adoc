@@ -26,10 +26,11 @@ git-purge-branches - delete local branches merged into a commit
 Deletes the local branches merged into _<commit>_, `HEAD` by default.
 A branch is merged if its tip is reachable from _<commit>_.
 
-Three kinds of branches are always kept.
+Five kinds of branches are always kept.
 Branches checked out in any worktree are kept, which includes the current branch.
 Every branch is merged into itself, so a branch given as _<commit>_ is kept as well.
-A branch exempt by <<setting-delete-merged,*branch.<name>.deleteMerged*>> is kept, as described under <<configuration,CONFIGURATION>>.
+The default branch of each remote, such as `main` for `origin/HEAD`, is kept, since a topic branch contains the branch it started from.
+Branches that match a pattern of <<setting-keep,*purge-branches.keep*>> or are exempt by <<setting-delete-merged,*branch.<name>.deleteMerged*>> are kept, as described under <<configuration,CONFIGURATION>>.
 
 Merged branches are deleted with linkgit:git-branch[git branch -d], which refuses a branch that is not merged into its upstream or, without an upstream, into `HEAD`.
 A branch merged into _<commit>_ can therefore remain if _<commit>_ is not `HEAD`, or if its upstream lacks commits of the branch.
@@ -78,6 +79,11 @@ No branch is deleted in that case.
 
 [#configuration]
 == Configuration
+
+[[setting-keep]]*purge-branches.keep*::
+A glob pattern, such as `develop` or `+release/*+`, whose matching branches are never deleted, not even with <<option-equivalent,*--equivalent*>>.
+The pattern matches the whole name of a branch, and `+*+` matches slashes as well.
+The setting may be given several times, such as with `git config --add`.
 
 [[setting-delete-merged]]*branch.<name>.deleteMerged*::
 If false, branch _<name>_ is never deleted, not even with <<option-equivalent,*--equivalent*>>.

@@ -554,6 +554,78 @@ function TestKeepsRebasedBranchExemptByConfig()
     ExpectBranches feature master
 }
 
+# Points the default branch of the given remote at the local branch of the
+# same name, as a clone records it.
+function SetRemoteDefaultBranch()
+{
+    local remote="$1"
+    local branch="$2"
+
+    Git update-ref "refs/remotes/${remote}/${branch}" "${branch}"
+    Git symbolic-ref "refs/remotes/${remote}/HEAD" "refs/remotes/${remote}/${branch}"
+}
+
+# A topic branch contains the branch it started from, which therefore counts
+# as merged.
+function TestKeepsDefaultBranchOfRemote()
+{
+    Git branch develop
+    Git switch -q -c topic
+    Git commit -q --allow-empty -m topic
+    SetRemoteDefaultBranch origin master
+    RunPurge HEAD
+    ExpectStatus 0
+    ExpectBranches master topic
+}
+
+function TestKeepsDefaultBranchOfEachRemote()
+{
+    Git branch develop
+    Git branch other
+    Git switch -q -c topic
+    Git commit -q --allow-empty -m topic
+    SetRemoteDefaultBranch origin master
+    SetRemoteDefaultBranch upstream develop
+    RunPurge HEAD
+    ExpectStatus 0
+    ExpectBranches develop master topic
+}
+
+# A pattern matches the whole name of a branch, as a glob of the shell does.
+function TestKeepsBranchesMatchingKeepPatterns()
+{
+    Git branch develop
+    Git branch release/1.0
+    Git branch prerelease/1.0
+    Git config --add purge-branches.keep develop
+    Git config --add purge-branches.keep 'release/*'
+    RunPurge
+    ExpectStatus 0
+    ExpectBranches develop master release/1.0
+}
+
+function TestKeepsRebasedBranchMatchingKeepPattern()
+{
+    CreateRebasedBranch release-1.0 master
+    Git config purge-branches.keep 'release-*'
+    RunPurge --equivalent
+    ExpectStatus 0
+    ExpectBranches master release-1.0
+}
+
+function TestDryRunOmitsProtectedBranches()
+{
+    Git branch develop
+    Git branch merged
+    Git switch -q -c topic
+    Git commit -q --allow-empty -m topic
+    SetRemoteDefaultBranch origin master
+    Git config purge-branches.keep develop
+    RunPurge --dry-run HEAD
+    ExpectStatus 0
+    ExpectStdout merged
+}
+
 function TestDryRunOmitsExemptBranches()
 {
     Git branch merged
@@ -1673,7 +1745,7 @@ function TestPagesLinkOptionsAndSections()
 
     # The options, the argument and the setting show a link to their anchor on
     # hover, as the sections do.
-    for anchor in option-dry-run option-equivalent option-help argument-commit setting-delete-merged; do
+    for anchor in option-dry-run option-equivalent option-help argument-commit setting-keep setting-delete-merged; do
         ExpectPageContains "<dt class=\"hdlist1\"><a id=\"${anchor}\"></a><a class=\"anchor\" href=\"#${anchor}\"></a>"
     done
 
@@ -2259,6 +2331,11 @@ Run TestRejectsUnknownOptionInBundle
 Run TestRejectsSecondCommit
 Run TestKeepsMergedBranchExemptByConfig
 Run TestKeepsRebasedBranchExemptByConfig
+Run TestKeepsDefaultBranchOfRemote
+Run TestKeepsDefaultBranchOfEachRemote
+Run TestKeepsBranchesMatchingKeepPatterns
+Run TestKeepsRebasedBranchMatchingKeepPattern
+Run TestDryRunOmitsProtectedBranches
 Run TestDryRunOmitsExemptBranches
 Run TestDeletesBranchWithDeleteMergedTrue
 Run TestKeepsBranchExemptByConfigSpelledNo
