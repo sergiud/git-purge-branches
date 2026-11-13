@@ -222,6 +222,14 @@ if ((dry_run)); then
     exit 0
 fi
 
+# The commit of each branch, which restores a deleted branch
+declare -A tips
+tip_listing="$(git for-each-ref --format='%(refname:lstrip=2) %(objectname)' refs/heads/)"
+
+while read -r branch tip; do
+    tips["${branch}"]="${tip}"
+done <<<"${tip_listing}"
+
 declare -i status=0
 
 if [[ ${#merged[@]} -ne 0 ]]; then
@@ -232,6 +240,29 @@ fi
 # upstream by hash.
 if [[ ${#equivalents[@]} -ne 0 ]]; then
     git branch -D "${equivalents[@]}" || status=$?
+fi
+
+# Prints a command per deleted branch that restores it at its commit, since git
+# branch -d names the commit only in part.
+remaining="$(git for-each-ref --format='%(refname:lstrip=2)' refs/heads/)"
+readarray -t remaining_branches <<<"${remaining}"
+declare -A kept_branches
+
+for branch in "${remaining_branches[@]}"; do
+    kept_branches["${branch}"]=1
+done
+
+restore=()
+
+for branch in "${merged[@]}" "${equivalents[@]}"; do
+    if [[ -z ${kept_branches["${branch}"]:-} ]]; then
+        restore+=("git branch ${branch} ${tips["${branch}"]}")
+    fi
+done
+
+if ((${#restore[@]} != 0)); then
+    echo "Restore the deleted branches with:"
+    printf '%s\n' "${restore[@]}"
 fi
 
 exit "${status}"

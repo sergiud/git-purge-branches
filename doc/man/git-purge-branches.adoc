@@ -35,6 +35,8 @@ Branches that match a pattern of <<setting-keep,*purge-branches.keep*>> or are e
 Merged branches are deleted with linkgit:git-branch[git branch -d], which refuses a branch that is not merged into its upstream or, without an upstream, into `HEAD`.
 A branch merged into _<commit>_ can therefore remain if _<commit>_ is not `HEAD`, or if its upstream lacks commits of the branch.
 
+After deleting, the command prints a linkgit:git-branch[git branch] command per deleted branch that restores the branch at its commit.
+
 A remote that rebases a branch before merging it, as GitLab and GitHub offer, merges copies of its commits with other hashes.
 The local branch then keeps the original commits and is not merged.
 <<option-equivalent,*--equivalent*>> also deletes such branches.

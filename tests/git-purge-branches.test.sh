@@ -192,6 +192,15 @@ function ExpectStdout()
     fi
 }
 
+function ExpectStdoutContains()
+{
+    local expected="$1"
+
+    if ! grep -qF -- "${expected}" "${sandbox}/stdout"; then
+        Fail "expected stdout to contain '${expected}', got '$(<"${sandbox}/stdout")'"
+    fi
+}
+
 function ExpectStderrContains()
 {
     local expected="$1"
@@ -432,6 +441,78 @@ function TestReportsFailureToDeleteRebasedBranch()
     RunPurge --equivalent
     ExpectStatus 1
     ExpectBranches master rebased
+}
+
+# Runs the commands that the restore hint in the output of the script prints,
+# one per line after its header.
+function RunRestoreHint()
+{
+    local line
+    local -a command
+
+    while IFS= read -r line; do
+        if [[ ${line} == "git branch "* ]]; then
+            read -ra command <<<"${line}"
+            Git "${command[@]:1}"
+        fi
+    done <"${sandbox}/stdout"
+}
+
+function TestPrintsHowToRestoreDeletedBranches()
+{
+    local feature
+    local topic
+    local restored
+
+    Git branch feature
+    Git commit -q --allow-empty -m next
+    Git branch topic
+    feature="$(Git rev-parse feature)"
+    topic="$(Git rev-parse topic)"
+    RunPurge
+    ExpectStatus 0
+    ExpectBranches master
+    ExpectStdoutContains "Restore the deleted branches with:"
+    RunRestoreHint
+    ExpectBranches feature master topic
+    restored="$(Git rev-parse feature topic)"
+    ExpectLines "${restored}" "${feature}"$'\n'"${topic}"
+}
+
+# git branch -d refuses a branch that is not merged into its upstream, which
+# remains and needs no restoring.
+function TestRestoreHintOmitsRefusedBranches()
+{
+    local master
+
+    Git config remote.origin.url "${repo}"
+    Git config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'
+    Git update-ref refs/remotes/origin/feature HEAD
+    Git commit -q --allow-empty -m unpushed
+    Git branch feature
+    Git config branch.feature.remote origin
+    Git config branch.feature.merge refs/heads/feature
+    Git branch other
+    master="$(Git rev-parse master)"
+    RunPurge
+    ExpectStatus 1
+    ExpectStdoutContains "git branch other ${master}"
+
+    if grep -q '^git branch feature ' "${sandbox}/stdout"; then
+        Fail "expected no restore command of the remaining branch feature"
+    fi
+}
+
+function TestPrintsNoRestoreHintWithoutDeletedBranches()
+{
+    Git branch feature
+    RunPurge --dry-run
+    ExpectStatus 0
+    ExpectStdout feature
+    CreateUnmergedBranch topic
+    RunPurge feature
+    ExpectStatus 0
+    ExpectStdout ""
 }
 
 function TestDryRunListsMergedBranches()
@@ -2319,6 +2400,9 @@ Run TestKeepsBranchWithChangingMergeWithEquivalent
 Run TestKeepsRebasedBranchOfOtherWorktreeWithEquivalent
 Run TestDeletesRebasedBranchWhenMergedBranchIsRefused
 Run TestReportsFailureToDeleteRebasedBranch
+Run TestPrintsHowToRestoreDeletedBranches
+Run TestRestoreHintOmitsRefusedBranches
+Run TestPrintsNoRestoreHintWithoutDeletedBranches
 Run TestDryRunListsMergedBranches
 Run TestDryRunListsRebasedBranchesWithEquivalent
 Run TestDryRunOmitsRebasedBranchesByDefault
