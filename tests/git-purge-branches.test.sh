@@ -1590,7 +1590,20 @@ function TestPagesHighlightExamples()
     RunJust pages --output="${sandbox}/site"
     ExpectStatus 0
     ExpectPageContains '<code data-lang="console">'
-    ExpectPageContains 'git purge-branches <span style="color: #116329">--dry-run</span>'
+    ExpectPageContains 'git purge-branches <span class="nt">--dry-run</span>'
+}
+
+# The HTML page follows the color scheme of the browser, from the text and the
+# highlighted examples to the corner that links to the project.
+function TestPagesFollowDarkColorScheme()
+{
+    RunJust pages --output="${sandbox}/site"
+    ExpectStatus 0
+    ExpectPageContains '@media (prefers-color-scheme: dark)'
+    ExpectPageContains 'color-scheme: light dark;'
+    ExpectPageContains '.github-corner svg { fill: #f0f6fc !important; color: #0d1117 !important; }'
+    ExpectPageContains '#header > h1:first-child { color: #e6edf3; }'
+    ExpectPageContains 'pre.rouge .nt {'
 }
 
 # The HTML page names the version of its sources, so that the switcher of
@@ -1658,9 +1671,13 @@ function TestPagesLinkOptionsAndSections()
         ExpectPageContains "<h2 id=\"${anchor}\"><a class=\"anchor\" href=\"#${anchor}\"></a>"
     done
 
+    # The options, the argument and the setting show a link to their anchor on
+    # hover, as the sections do.
     for anchor in option-dry-run option-equivalent option-help argument-commit setting-delete-merged; do
-        ExpectPageContains "<a id=\"${anchor}\"></a>"
+        ExpectPageContains "<dt class=\"hdlist1\"><a id=\"${anchor}\"></a><a class=\"anchor\" href=\"#${anchor}\"></a>"
     done
+
+    ExpectPageContains 'dt.hdlist1:hover > a.anchor'
 
     ExpectPageContains '<a href="#option-dry-run"><strong>--dry-run</strong></a>'
     ExpectPageContains '<a href="#option-equivalent"><strong>--equivalent</strong></a>'
@@ -2297,6 +2314,7 @@ Run TestPacmanContainsSources
 Run TestPagesRenderManualPage
 Run TestPagesSetLiteralInputInMonospace
 Run TestPagesHighlightExamples
+Run TestPagesFollowDarkColorScheme
 Run TestPagesNameVersion
 Run TestPagesLinkToProject
 Run TestPagesServeInstallScript

@@ -32,8 +32,9 @@ if [[ -z ${SOURCE_DATE_EPOCH:-} ]]; then
     export SOURCE_DATE_EPOCH
 fi
 
-# The extension provides the macro linkgit of the documentation of Git.
-readonly asciidoctor=(asciidoctor --require "${root_dir}/doc/man/linkgit.rb" --failure-level WARN)
+# The extensions provide the macro linkgit of the documentation of Git and the
+# links of the anchors of options.
+readonly asciidoctor=(asciidoctor --require "${root_dir}/doc/man/extensions.rb" --failure-level WARN)
 
 # Only HTML highlights the examples, so that manual pages build without Rouge,
 # and names the version, which the published site of all releases switches
@@ -41,7 +42,7 @@ readonly asciidoctor=(asciidoctor --require "${root_dir}/doc/man/linkgit.rb" --f
 if [[ -n ${html_dir} ]]; then
     version="$("${root_dir}/scripts/version.sh" version)"
     "${asciidoctor[@]}" --backend html5 --attribute source-highlighter=rouge \
-        --attribute rouge-css=style --attribute revnumber="${version}" \
+        --attribute rouge-css=class --attribute revnumber="${version}" \
         --out-file "${html_dir}/index.html" "${root_dir}/doc/man/git-purge-branches.adoc"
     exit 0
 fi

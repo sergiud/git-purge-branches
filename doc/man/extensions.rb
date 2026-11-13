@@ -2,8 +2,10 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-# Provides the inline macro linkgit:<command>[<text>] of the documentation of
-# Git, which shows a command of Git in bold. linkgit:git-branch[1] shows
+# Extends Asciidoctor for the manual pages.
+#
+# The inline macro linkgit:<command>[<text>] of the documentation of Git shows
+# a command of Git in bold. linkgit:git-branch[1] shows
 # git-branch(1), and linkgit:git-branch[git branch -d] shows the given text.
 # HTML links the command to its documentation on git-scm.com, while a manual
 # page names it only.
@@ -24,6 +26,19 @@ Asciidoctor::Extensions.register do
         create_anchor parent, formatted, type: :link, target: %(https://git-scm.com/docs/#{target})
       else
         create_inline parent, :quoted, formatted
+      end
+    end
+  end
+
+  # HTML links the anchors of the entries of description lists, such as
+  # options, to themselves, as the anchors of sections do, so that readers can
+  # copy the address of an entry.
+  postprocessor do
+    process do |document, output|
+      next output unless document.basebackend? 'html'
+
+      output.gsub(%r{<dt class="hdlist1"><a id="([^"]+)"></a>}) do
+        %(<dt class="hdlist1"><a id="#{Regexp.last_match(1)}"></a><a class="anchor" href="##{Regexp.last_match(1)}"></a>)
       end
     end
   end
